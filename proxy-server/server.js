@@ -712,11 +712,6 @@ function getGuidesForTargetUrl(targetUrl) {
   }
 }
 
-const GUIDE_PATTERN_FILES = [
-  'guide-patterns.json',
-  'togodx_guide-patterns.json'
-];
-
 function normalizeGuidePatternPayload(payload, sourceFile) {
   if (Array.isArray(payload)) return payload;
   if (payload && typeof payload === 'object') return [payload];
@@ -730,17 +725,22 @@ function loadGuidePatterns() {
   try {
     const loaded = [];
 
-    GUIDE_PATTERN_FILES.forEach((filename) => {
-      const patternPath = path.resolve(__dirname, `../${filename}`);
-      if (!fs.existsSync(patternPath)) {
-        return;
-      }
+    const guidesDir = path.resolve(__dirname, '../guides');
+    if (fs.existsSync(guidesDir)) {
+      const subDirs = fs.readdirSync(guidesDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
 
-      const raw = fs.readFileSync(patternPath, 'utf-8').replace(/^\uFEFF/, '');
-      const parsed = JSON.parse(raw);
-      const normalized = normalizeGuidePatternPayload(parsed, filename);
-      loaded.push(...normalized);
-    });
+      subDirs.forEach((sub) => {
+        const patternPath = path.join(guidesDir, sub, 'guide-patterns.json');
+        if (!fs.existsSync(patternPath)) return;
+
+        const raw = fs.readFileSync(patternPath, 'utf-8').replace(/^\uFEFF/, '');
+        const parsed = JSON.parse(raw);
+        const normalized = normalizeGuidePatternPayload(parsed, `guides/${sub}/guide-patterns.json`);
+        loaded.push(...normalized);
+      });
+    }
 
     _cachedGuidePatterns = loaded;
   } catch (err) {

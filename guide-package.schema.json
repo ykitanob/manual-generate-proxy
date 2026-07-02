@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/guide-package.schema.json",
+  "title": "GuidePackage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "guideId",
+    "version",
+    "expiresAt",
+    "locale",
+    "steps",
+    "theme",
+    "constraints",
+    "signature"
+  ],
+  "properties": {
+    "guideId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 32
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "theme": {
+      "$ref": "#/$defs/theme"
+    },
+    "constraints": {
+      "$ref": "#/$defs/constraints"
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 2048
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stepId",
+        "selector",
+        "title",
+        "description",
+        "action",
+        "placement",
+        "nextCondition",
+        "timeoutMs"
+      ],
+      "properties": {
+        "stepId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "selector": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256,
+          "allOf": [
+            {
+              "if": {
+                "type": "string"
+              },
+              "then": {
+                "not": {
+                  "pattern": "(^|\\s)(script|iframe|html)(\\s|$)|\\bbody\\b"
+                }
+              }
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "highlight",
+            "tooltip",
+            "scrollIntoView",
+            "focusInput",
+            "waitForClick",
+            "waitForText",
+            "complete"
+          ]
+        },
+        "placement": {
+          "type": "string",
+          "enum": [
+            "top",
+            "right",
+            "bottom",
+            "left",
+            "center"
+          ]
+        },
+        "nextCondition": {
+          "type": "string",
+          "enum": [
+            "immediate",
+            "onClick",
+            "onInput",
+            "onVisible",
+            "manual"
+          ]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primaryColor",
+        "textColor",
+        "zIndex"
+      ],
+      "properties": {
+        "primaryColor": {
+          "type": "string",
+          "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+        },
+        "textColor": {
+          "type": "string",
+          "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 2147483647
+        },
+        "fontFamily": {
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedDomains",
+        "blockedSelectors",
+        "maxDomOps",
+        "maxDurationMs"
+      ],
+      "properties": {
+        "allowedDomains": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "blockedSelectors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "maxDomOps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxDurationMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 600000
+        }
+      }
+    }
+  }
+}

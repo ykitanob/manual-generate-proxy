@@ -1,0 +1,49 @@
+/* ======================================================
+   NBRC Driver Guide — content.css
+   nite.go.jp のページに注入されるスタイルです
+   ====================================================== */
+
+/* 起動ボタン */
+#nbrc-guide-btn {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 2147483646;
+  padding: 8px 16px;
+  background: #1f7a5a;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-size: 13px;
+  font-family: "Meiryo", "Yu Gothic UI", sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: background 0.2s, transform 0.1s;
+}
+
+#nbrc-guide-btn:hover {
+  background: #2aa372;
+  transform: translateY(-1px);
+}
+
+#nbrc-guide-btn:active {
+  transform: translateY(0);
+}
+
+/* Driver.js のデフォルトで .driver-active-element（ハイライト要素）は
+   pointer-events: auto になる。広すぎるルールは避け、ガイドUIのみ有効化する。 */
+
+/* ガイドボタンはドライバーアクティブ中も操作可能にする */
+.driver-active #nbrc-guide-btn {
+  pointer-events: auto !important;
+}
+
+.driver-overlay,
+.driver-overlay * {
+  pointer-events: none !important;
+}
+
+.driver-popover,
+.driver-popover * {
+  pointer-events: auto !important;
+}

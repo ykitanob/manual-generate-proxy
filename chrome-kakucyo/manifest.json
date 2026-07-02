@@ -1,0 +1,13 @@
+{
+  "name": "NBRC Driver Guide",
+  "description": "nite.go.jp にDriver.jsガイドを注入する拡張機能",
+  "version": "1.0",
+  "manifest_version": 3,
+  "content_scripts": [
+    {
+      "matches": ["https://www.nite.go.jp/*"],
+      "js": ["driver.js", "content.js"],
+      "css": ["driver.css", "content.css"]
+    }
+  ]
+}

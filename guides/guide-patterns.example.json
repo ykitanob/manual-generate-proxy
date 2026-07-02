@@ -1,0 +1,32 @@
+[
+  {
+    "guideId": "example-guide",
+    "version": 1,
+    "locale": "ja-JP",
+    "title": "サンプルガイド",
+    "description": "このファイルをコピーして guides/<サイト名>/guide-patterns.json に配置してください。",
+    "steps": [
+      {
+        "id": "step-1",
+        "selector": "body",
+        "action": "tooltip",
+        "title": "ガイドへようこそ",
+        "description": "最初のステップです。"
+      },
+      {
+        "id": "step-2",
+        "selector": "#some-element",
+        "action": "highlight",
+        "title": "要素をハイライト",
+        "description": "CSS セレクタで対象要素を指定します。"
+      },
+      {
+        "id": "step-3",
+        "selector": "body",
+        "action": "complete",
+        "title": "完了",
+        "description": "ガイドが完了しました。"
+      }
+    ]
+  }
+]

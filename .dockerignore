@@ -1,0 +1,20 @@
+# Git
+.git
+.gitignore
+
+# エディタ・OS
+.vscode
+*.DS_Store
+Thumbs.db
+
+# テスト・ドキュメント
+test.html
+test2.html
+*.md
+
+# node_modules はビルドステージで再生成するためスキップ
+proxy-server/node_modules
+
+# ログ
+*.log
+npm-debug.log*

@@ -1,0 +1,52 @@
+# ===========================
+# サイト固有データ（非公開）
+# ===========================
+
+# サイト別ガイドデータ（guides/<サイト名>/ 以下を除外、例示ファイルは含める）
+guides/*/
+
+# 旧形式のガイドファイル（ルート直下）
+guide-patterns.json
+togodx_guide-patterns.json
+
+# ホームページUI・LLMプロンプト設定（サイト固有URLを含む）
+proxy-server/guide-selection-prompt.json
+
+# ===========================
+# 環境・シークレット
+# ===========================
+.env
+.env.*
+*.env
+
+# ===========================
+# 依存パッケージ
+# ===========================
+node_modules/
+proxy-server/node_modules/
+
+# ===========================
+# キャッシュ・ビルド成果物
+# ===========================
+*.log
+npm-debug.log*
+.npm/
+
+# ===========================
+# OS・エディタ
+# ===========================
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.swp
+*.swo
+
+# ===========================
+# クロール済みキャッシュHTML（サイト固有）
+# ===========================
+menu_001_*.html
+togoDX_case.html
+togodx_case.html
+menu_001_*.md
+togodx_case.md
+togoDX_case.md

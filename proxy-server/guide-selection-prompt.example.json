@@ -1,0 +1,10 @@
+{
+  "phase1": {
+    "description": "既存ガイドから最適なものを選択し、推測理由を説明するプロンプト",
+    "template": "以下は既存のガイド一覧です：\n{GUIDES_LIST}\n\nユーザーのリクエスト：\"{USER_PROMPT}\"\n\n【指示】\n1. ユーザーのリクエストを分析し、最も適切な既存ガイドを選択してください\n2. 推測に使った重要なキーワード（3-5個）をリストアップしてください\n3. 選択したガイドを、ユーザーの入力からどう推測したかを1-2文で説明してください\n4. 必ず以下の JSON 形式で返してください\n\n{\n  \"selectedGuideId\": \"選択したガイドのID\",\n  \"guideTitle\": \"選択したガイドのタイトル\",\n  \"keywords\": [\"キーワード1\", \"キーワード2\", \"キーワード3\"],\n  \"reasoning\": \"ユーザーの入力から選択理由を日本語で説明（2-3文）\",\n  \"needsNewGuide\": false\n}\n\nJSON のみを返してください。他の説明は不要です。"
+  },
+  "ui": {
+    "description": "ホームページUI定義 — サイトに合わせて url の value を変更してください",
+    "html": "<!doctype html>\n<html lang=\"ja\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Guide Proxy</title>\n</head>\n<body>\n  <h1>Guide Proxy</h1>\n  <form action=\"/proxy\" method=\"get\">\n    <input type=\"url\" name=\"url\" required value=\"https://example.com/\">\n    <button type=\"submit\">開く</button>\n  </form>\n</body>\n</html>"
+  }
+}

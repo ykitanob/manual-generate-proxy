@@ -54,6 +54,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="ブラウザを表示して手動で同意ボタンをクリックしてからクロールする",
     )
+    parser.add_argument(
+        "--output-dir",
+        dest="output_dir",
+        default=None,
+        help="出力先ディレクトリ（省略時は output/ を使用）",
+    )
     return parser.parse_args()
 
 
@@ -336,6 +342,16 @@ def _crawl_single_page(page, url: str) -> dict:
 
 def crawl(target_url: str, manual_consent: bool = False) -> dict:
     print(f"[..] クロール中: {target_url}")
+    try:
+        from playwright.sync_api import sync_playwright as _check
+    except ImportError:
+        raise RuntimeError(
+            "Playwright がインストールされていません。\n"
+            "  pip install playwright\n"
+            "  playwright install chromium\n"
+            "を実行してください。"
+        )
+
     with sync_playwright() as pw:
         launch_args = [
             "--disable-blink-features=AutomationControlled",
@@ -344,10 +360,16 @@ def crawl(target_url: str, manual_consent: bool = False) -> dict:
             "--disable-gpu",               # WSLg で GPU レンダリングが不安定な場合に回避
             "--start-maximized",           # ウィンドウを最大化して確実に前面表示
         ]
-        browser = pw.chromium.launch(
-            headless=not manual_consent,
-            args=launch_args,
-        )
+        try:
+            browser = pw.chromium.launch(
+                headless=not manual_consent,
+                args=launch_args,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Chromium の起動に失敗しました: {exc}\n"
+                "playwright install chromium を実行してください。"
+            ) from exc
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -431,19 +453,20 @@ def crawl(target_url: str, manual_consent: bool = False) -> dict:
     }
 
 
-def save(data: dict) -> None:
-    OUTPUT_DIR.mkdir(exist_ok=True)
+def save(data: dict, output_dir: Path | None = None) -> None:
+    dest = Path(output_dir) if output_dir else OUTPUT_DIR
+    dest.mkdir(parents=True, exist_ok=True)
     prefix = _url_to_file_prefix(data["url"])
 
-    (OUTPUT_DIR / f"{prefix}.html").write_text(data["html"],     encoding="utf-8")
-    (OUTPUT_DIR / f"{prefix}.md"  ).write_text(data["markdown"], encoding="utf-8")
+    (dest / f"{prefix}.html").write_text(data["html"],     encoding="utf-8")
+    (dest / f"{prefix}.md"  ).write_text(data["markdown"], encoding="utf-8")
     meta = {"url": data["url"], "title": data["title"], "links": data["links"]}
-    (OUTPUT_DIR / f"{prefix}_meta.json").write_text(
+    (dest / f"{prefix}_meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
     # トップページの selector_info を保存
-    (OUTPUT_DIR / f"{prefix}_selector_info.json").write_text(
+    (dest / f"{prefix}_selector_info.json").write_text(
         json.dumps(data.get("selector_info", {}), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -457,11 +480,11 @@ def save(data: dict) -> None:
         md_name   = f"{base_name}.md"
         si_name   = f"{base_name}_selector_info.json"
         if item.get("html"):
-            (OUTPUT_DIR / html_name).write_text(item["html"], encoding="utf-8")
+            (dest / html_name).write_text(item["html"], encoding="utf-8")
         if item.get("markdown"):
-            (OUTPUT_DIR / md_name).write_text(item["markdown"], encoding="utf-8")
+            (dest / md_name).write_text(item["markdown"], encoding="utf-8")
         if item.get("selector_info"):
-            (OUTPUT_DIR / si_name).write_text(
+            (dest / si_name).write_text(
                 json.dumps(item["selector_info"], ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
@@ -480,11 +503,11 @@ def save(data: dict) -> None:
             }
         )
 
-    (OUTPUT_DIR / f"{prefix}_level1_menu.json").write_text(
+    (dest / f"{prefix}_level1_menu.json").write_text(
         json.dumps(level1_index, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    print(f"[OK] 保存しました -> {OUTPUT_DIR}")
+    print(f"[OK] 保存しました -> {dest}")
     print(f"     プレフィックス: {prefix}")
     print(f"     - {prefix}.md    ({len(data['markdown']):,} 文字)")
     print(f"     - {prefix}.html  ({len(data['html']):,} 文字)")
@@ -501,4 +524,4 @@ def save(data: dict) -> None:
 if __name__ == "__main__":
     args = _parse_args()
     target_url = args.url_option or args.url or DEFAULT_URL
-    save(crawl(target_url, manual_consent=args.manual_consent))
+    save(crawl(target_url, manual_consent=args.manual_consent), output_dir=args.output_dir)

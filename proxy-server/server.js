@@ -3,6 +3,7 @@ const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const PORT = Number(process.env.PORT || 8080);
 const STATIC_DIR = path.join(__dirname, 'static');
@@ -318,7 +319,19 @@ function stripMetaCsp(html) {
 function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
   const base = new URL(targetUrl);
 
-  function toProxyUrl(href) {
+  // フレームワークの非内容静的ファイルはプロキシ経由にしない。
+  // これにより document.currentScript.src が元 URLのままになり、
+  // Next.js の InvariantError (「/_next/ を含むはず」チェック等) が解消される。
+  function isFrameworkStatic(absUrl) {
+    try {
+      const p = new URL(absUrl).pathname;
+      return /\/_next\/|\/__nuxt\/|\/static\/chunks\/|\/static\/js\/|\/static\/css\//.test(p);
+    } catch {
+      return false;
+    }
+  }
+
+  function toProxyUrl(href, direct) {
     if (!href) return href;
     const h = href.trim();
     if (h.startsWith('data:') || h.startsWith('blob:') ||
@@ -327,6 +340,8 @@ function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
     }
     try {
       const abs = new URL(h, base).href;
+      // フレームワーク静的ファイル（direct=true）は直接 URL
+      if (direct && isFrameworkStatic(abs)) return abs;
       return `${proxyOrigin}/proxy?url=${encodeURIComponent(abs)}`;
     } catch {
       return href;
@@ -335,13 +350,13 @@ function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
 
   // <link href="..."> — integrity/crossorigin も除去（プロキシ経由URL変更後のSRI失敗を防ぐ）
   html = html.replace(/(<link\b[^>]*?\bhref=)(["'])([^"']*)\2/gi,
-    (_, pre, q, href) => `${pre}${q}${toProxyUrl(href)}${q}`);
+    (_, pre, q, href) => `${pre}${q}${toProxyUrl(href, true)}${q}`);
   html = html.replace(/(<link\b[^>]*)\s+integrity=["'][^"']*["']/gi, '$1');
   html = html.replace(/(<link\b[^>]*)\s+crossorigin=["'][^"']*["']/gi, '$1');
 
   // <script src="..."> — integrity/crossorigin も除去（SRI + CORS 失敗を防ぐ）
   html = html.replace(/(<script\b[^>]*?\bsrc=)(["'])([^"']*)\2/gi,
-    (_, pre, q, src) => `${pre}${q}${toProxyUrl(src)}${q}`);
+    (_, pre, q, src) => `${pre}${q}${toProxyUrl(src, true)}${q}`);
   html = html.replace(/(<script\b[^>]*)\s+integrity=["'][^"']*["']/gi, '$1');
   html = html.replace(/(<script\b[^>]*)\s+crossorigin=["'][^"']*["']/gi, '$1');
 
@@ -373,10 +388,20 @@ function injectIntoHtml(html, targetUrl, proxyOrigin) {
     `<script src="${safeOrigin}/static/interceptor.js"></script>`
   ].join('\n');
 
+  // driver.js / driver.css: node_modules があればローカル提供、なければ CDN
+  const NM_DRIVER_DIR = path.join(__dirname, 'node_modules', 'driver.js', 'dist');
+  const hasLocalDriver = fs.existsSync(path.join(NM_DRIVER_DIR, 'driver.js.iife.js'));
+  const DRIVER_JS_SRC  = hasLocalDriver
+    ? `${safeOrigin}/assets/driver.js`
+    : 'https://cdn.jsdelivr.net/npm/driver.js@1/dist/driver.js.iife.js';
+  const DRIVER_CSS_SRC = hasLocalDriver
+    ? `${safeOrigin}/assets/driver.css`
+    : 'https://cdn.jsdelivr.net/npm/driver.js@1/dist/driver.css';
+
   const deferredAssets = [
-    `<link rel="stylesheet" href="${safeOrigin}/assets/driver.css">`,
+    `<link rel="stylesheet" href="${DRIVER_CSS_SRC}">`,
     `<link rel="stylesheet" href="${safeOrigin}/static/inject.css">`,
-    `<script src="${safeOrigin}/assets/driver.js" defer></script>`,
+    `<script src="${DRIVER_JS_SRC}" defer></script>`,
     `<script src="${safeOrigin}/static/inject.js" defer></script>`
   ].join('\n');
 
@@ -925,6 +950,183 @@ function summarizeGuideForSelection(guide) {
   return summary || (guide.title || guide.guideId);
 }
 
+// ────────────────────────────────────────────────────
+// 未知サイト向けブートストラップ
+// ────────────────────────────────────────────────────
+
+function runCrawl(targetUrl, outputDir) {
+  return new Promise((resolve, reject) => {
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const scriptPath = path.resolve(__dirname, '../crawl_pages.py');
+    const proc = spawn(pythonCmd, [scriptPath, '--url', targetUrl, '--output-dir', outputDir], {
+      cwd: path.resolve(__dirname, '..'),
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d) => { stdout += d; console.log('[crawl]', d.toString().trimEnd()); });
+    proc.stderr.on('data', (d) => { stderr += d; console.error('[crawl err]', d.toString().trimEnd()); });
+    proc.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`crawl_pages.py exited with code ${code}:\n${stderr}`));
+    });
+    proc.on('error', reject);
+  });
+}
+
+async function handleBootstrapSite(req, res) {
+  if (req.method !== 'POST') {
+    sendText(res, 405, 'Method Not Allowed');
+    return;
+  }
+
+  let body;
+  try {
+    body = JSON.parse(await parseBody(req));
+  } catch {
+    sendText(res, 400, JSON.stringify({ error: 'Invalid JSON' }), 'application/json; charset=utf-8');
+    return;
+  }
+
+  const { targetUrl, ollamaUri, modelName, apiKey, prompt } = body;
+  if (!targetUrl) {
+    sendText(res, 400, JSON.stringify({ error: 'targetUrl is required' }), 'application/json; charset=utf-8');
+    return;
+  }
+
+  let hostname;
+  try {
+    hostname = new URL(targetUrl).hostname;
+  } catch {
+    sendText(res, 400, JSON.stringify({ error: 'Invalid targetUrl' }), 'application/json; charset=utf-8');
+    return;
+  }
+
+  const proxyUrl = `/proxy?url=${encodeURIComponent(targetUrl)}`;
+
+  // 既知サイトはそのまま転送
+  if (SITE_GUIDE_MAP[hostname]) {
+    sendText(res, 200, JSON.stringify({ ok: true, bootstrapped: false, proxyUrl }),
+      'application/json; charset=utf-8');
+    return;
+  }
+
+  // guides/{hostname}/guide-patterns.json が既に存在する場合は登録して転送
+  const guidesDir = path.resolve(__dirname, '../guides');
+  const siteDir   = path.join(guidesDir, hostname);
+  const patternPath = path.join(siteDir, 'guide-patterns.json');
+
+  if (fs.existsSync(patternPath)) {
+    SITE_GUIDE_MAP[hostname] = hostname;
+    sendText(res, 200, JSON.stringify({ ok: true, bootstrapped: false, proxyUrl }),
+      'application/json; charset=utf-8');
+    return;
+  }
+
+  // LLM 設定が必要
+  if (!ollamaUri || !modelName) {
+    sendText(res, 400, JSON.stringify({ error: 'ollamaUri と modelName は未知サイトのガイド生成に必要です' }),
+      'application/json; charset=utf-8');
+    return;
+  }
+
+  try {
+    // 1. 出力ディレクトリ作成
+    fs.mkdirSync(siteDir, { recursive: true });
+
+    // 2. クロール実行
+    console.log(`[bootstrap] クロール開始: ${targetUrl} -> ${siteDir}`);
+    await runCrawl(targetUrl, siteDir);
+
+    // 3. クロール結果読み込み（selector_info + markdown）
+    const crawlFiles = fs.readdirSync(siteDir);
+    let crawlContext = '';
+
+    const siFile = crawlFiles.find((f) => f.endsWith('_selector_info.json') && !f.startsWith('menu_'));
+    if (siFile) {
+      const raw = fs.readFileSync(path.join(siteDir, siFile), 'utf-8');
+      crawlContext += `\n\n=== ${siFile} ===\n${raw.slice(0, 8000)}`;
+    }
+    const mdFile = crawlFiles.find((f) => f.endsWith('.md') && !f.startsWith('menu_'));
+    if (mdFile) {
+      const raw = fs.readFileSync(path.join(siteDir, mdFile), 'utf-8');
+      crawlContext += `\n\n=== ${mdFile} (Markdown) ===\n${raw.slice(0, 3000)}`;
+    }
+
+    // 4. GUIDE_AUTHORING.md 読み込み
+    const authoringPath = path.resolve(__dirname, '../GUIDE_AUTHORING.md');
+    const authoringMd = fs.existsSync(authoringPath)
+      ? fs.readFileSync(authoringPath, 'utf-8').slice(0, 6000)
+      : '';
+
+    // 5. 既存ガイドの例を1件読み込む
+    let exampleGuides = '';
+    if (fs.existsSync(guidesDir)) {
+      const dirs = fs.readdirSync(guidesDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && d.name !== hostname)
+        .map((d) => d.name);
+      if (dirs.length > 0) {
+        const exPath = path.join(guidesDir, dirs[0], 'guide-patterns.json');
+        if (fs.existsSync(exPath)) {
+          exampleGuides = fs.readFileSync(exPath, 'utf-8').slice(0, 4000);
+        }
+      }
+    }
+
+    // 6. LLM プロンプト構築
+    const generatePrompt = [
+      '以下は guide-patterns.json の作成仕様書です：',
+      authoringMd,
+      '',
+      '以下は既存の guide-patterns.json の例です（参考）：',
+      exampleGuides,
+      '',
+      '以下は対象サイトのクロール結果です：',
+      `対象URL: ${targetUrl}`,
+      crawlContext,
+      '',
+      ...(prompt ? [`ユーザーのリクエスト：「${prompt}」`, ''] : []),
+      '【指示】',
+      '上記の仕様書の形式と例に従い、このサイト向けの guide-patterns.json を生成してください。',
+      '- JSON 配列 [...] のみを返してください',
+      '- 各ガイドは guideId, version, locale, title, steps を持つこと',
+      '- steps は 3〜6 件程度、selector は上記クロール結果を参考に正確なCSSセレクタを使うこと',
+      ...(prompt ? ['- 特に「' + prompt + '」に関連するガイドを優先して含めること'] : []),
+      '- 他の説明文は不要です。JSON のみ返してください。',
+    ].join('\n');
+
+    // 7. LLM 呼び出し
+    console.log('[bootstrap] LLMでガイド生成中...');
+    const llmResponse = await callOllama(ollamaUri, modelName, generatePrompt, apiKey);
+
+    // 8. JSON 配列を抽出
+    const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('LLMがJSON配列を返しませんでした');
+    const guides = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(guides)) throw new Error('LLMのレスポンスがJSON配列ではありません');
+
+    // 9. guides/{hostname}/guide-patterns.json に保存
+    fs.writeFileSync(patternPath, JSON.stringify(guides, null, 2), 'utf-8');
+    console.log(`[bootstrap] 保存: ${patternPath} (${guides.length}件)`);
+
+    // 10. キャッシュ更新
+    SITE_GUIDE_MAP[hostname] = hostname;
+    _siteGuideCache.delete(hostname);
+    _cachedGuidePatterns = null;
+
+    sendText(res, 200, JSON.stringify({
+      ok: true,
+      bootstrapped: true,
+      guideCount: guides.length,
+      proxyUrl
+    }), 'application/json; charset=utf-8');
+
+  } catch (err) {
+    console.error('[bootstrap] エラー:', err.message);
+    sendText(res, 502, JSON.stringify({ error: err.message }), 'application/json; charset=utf-8');
+  }
+}
+
 async function handleGenerateGuide(req, res) {
   if (req.method !== 'POST') {
     sendText(res, 405, 'Method Not Allowed');
@@ -1058,6 +1260,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (reqUrl.pathname === '/api/bootstrap-site') {
+    await handleBootstrapSite(req, res);
+    return;
+  }
+
   if (reqUrl.pathname === '/api/guides') {
     // ?url= が指定された場合はサイト別ガイドのみ返す
     const targetUrl = reqUrl.searchParams.get('url') || '';
@@ -1138,12 +1345,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (reqUrl.pathname === '/assets/driver.js') {
-    serveFile(res, path.join(ASSETS_DIR, 'driver.js'), 'application/javascript; charset=utf-8');
+    const iife = path.join(__dirname, 'node_modules', 'driver.js', 'dist', 'driver.js.iife.js');
+    serveFile(res, iife, 'application/javascript; charset=utf-8');
     return;
   }
 
   if (reqUrl.pathname === '/assets/driver.css') {
-    serveFile(res, path.join(ASSETS_DIR, 'driver.css'), 'text/css; charset=utf-8');
+    const css = path.join(__dirname, 'node_modules', 'driver.js', 'dist', 'driver.css');
+    serveFile(res, css, 'text/css; charset=utf-8');
     return;
   }
 

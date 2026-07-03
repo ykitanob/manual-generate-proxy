@@ -873,22 +873,20 @@ async function callOllama(ollamaUri, modelName, prompt, apiKey) {
   });
 }
 
-async function callGemini(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY environment variable is not set');
+async function callGemini(modelName, prompt, apiKey) {
+  const key = apiKey || process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new Error('Gemini API キーが必要です（apiKey パラメータ または GEMINI_API_KEY 環境変数）');
   }
+  const model = modelName || 'gemini-2.0-flash';
 
   return new Promise((resolve, reject) => {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
-    const urlObj = new URL(url);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
     const options = {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 60000
     };
 
     const req = https.request(url, options, (res) => {
@@ -910,20 +908,117 @@ async function callGemini(prompt) {
     });
 
     req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Gemini API request timeout'));
-    });
-
-    const body = JSON.stringify({
-      contents: [
-        { role: 'user', parts: [{ text: prompt }] }
-      ]
-    });
-
-    req.write(body);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Gemini API request timeout')); });
+    req.write(JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }));
     req.end();
   });
+}
+
+async function callOpenAI(modelName, prompt, apiKey) {
+  if (!apiKey) {
+    throw new Error('OpenAI API キーが必要です（apiKey パラメータ）');
+  }
+  const model = modelName || 'gpt-4o-mini';
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.openai.com',
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      timeout: 60000
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`OpenAI API error ${res.statusCode}: ${data}`));
+          return;
+        }
+        try {
+          const result = JSON.parse(data);
+          resolve(result.choices?.[0]?.message?.content || '');
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('OpenAI API request timeout')); });
+    req.write(JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false
+    }));
+    req.end();
+  });
+}
+
+async function callClaude(modelName, prompt, apiKey) {
+  if (!apiKey) {
+    throw new Error('Claude API キーが必要です（apiKey パラメータ）');
+  }
+  const model = modelName || 'claude-3-5-haiku-20241022';
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      timeout: 60000
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`Claude API error ${res.statusCode}: ${data}`));
+          return;
+        }
+        try {
+          const result = JSON.parse(data);
+          resolve(result.content?.[0]?.text || '');
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Claude API request timeout')); });
+    req.write(JSON.stringify({
+      model,
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }]
+    }));
+    req.end();
+  });
+}
+
+/**
+ * provider に応じて LLM を呼び分けるディスパッチャ。
+ * provider: 'ollama' | 'openai' | 'claude' | 'gemini'
+ */
+async function callLLM(provider, { ollamaUri, modelName, prompt, apiKey }) {
+  switch ((provider || 'ollama').toLowerCase()) {
+    case 'ollama':  return callOllama(ollamaUri, modelName, prompt, apiKey);
+    case 'openai':  return callOpenAI(modelName, prompt, apiKey);
+    case 'claude':  return callClaude(modelName, prompt, apiKey);
+    case 'gemini':  return callGemini(modelName, prompt, apiKey);
+    default: throw new Error(`未対応のプロバイダーです: ${provider}（ollama / openai / claude / gemini）`);
+  }
 }
 
 // ガイド選択用に、ガイドの内容を要約したテキストを作る。
@@ -988,7 +1083,7 @@ async function handleBootstrapSite(req, res) {
     return;
   }
 
-  const { targetUrl, ollamaUri, modelName, apiKey, prompt } = body;
+  const { targetUrl, provider = 'ollama', ollamaUri, modelName, apiKey, prompt } = body;
   if (!targetUrl) {
     sendText(res, 400, JSON.stringify({ error: 'targetUrl is required' }), 'application/json; charset=utf-8');
     return;
@@ -1024,8 +1119,13 @@ async function handleBootstrapSite(req, res) {
   }
 
   // LLM 設定が必要
-  if (!ollamaUri || !modelName) {
-    sendText(res, 400, JSON.stringify({ error: 'ollamaUri と modelName は未知サイトのガイド生成に必要です' }),
+  if (!modelName) {
+    sendText(res, 400, JSON.stringify({ error: 'modelName は未知サイトのガイド生成に必要です' }),
+      'application/json; charset=utf-8');
+    return;
+  }
+  if (provider === 'ollama' && !ollamaUri) {
+    sendText(res, 400, JSON.stringify({ error: 'ollama の場合 ollamaUri が必要です' }),
       'application/json; charset=utf-8');
     return;
   }
@@ -1096,8 +1196,8 @@ async function handleBootstrapSite(req, res) {
     ].join('\n');
 
     // 7. LLM 呼び出し
-    console.log('[bootstrap] LLMでガイド生成中...');
-    const llmResponse = await callOllama(ollamaUri, modelName, generatePrompt, apiKey);
+    console.log(`[bootstrap] LLMでガイド生成中... (provider=${provider}, model=${modelName})`);
+    const llmResponse = await callLLM(provider, { ollamaUri, modelName, prompt: generatePrompt, apiKey });
 
     // 8. JSON 配列を抽出
     const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
@@ -1142,16 +1242,26 @@ async function handleGenerateGuide(req, res) {
     return;
   }
 
-  const { ollamaUri, modelName, prompt, apiKey } = body;
-  if (!ollamaUri || !modelName || !prompt) {
-    sendText(res, 400, JSON.stringify({ error: 'ollamaUri, modelName, and prompt are required' }), 'application/json; charset=utf-8');
+  const { provider = 'ollama', ollamaUri, modelName, prompt, apiKey, targetUrl } = body;
+  if (!modelName || !prompt) {
+    sendText(res, 400, JSON.stringify({ error: 'modelName and prompt are required' }), 'application/json; charset=utf-8');
+    return;
+  }
+  if (provider === 'ollama' && !ollamaUri) {
+    sendText(res, 400, JSON.stringify({ error: 'ollama の場合 ollamaUri が必要です' }), 'application/json; charset=utf-8');
     return;
   }
 
   try {
-    // 既存ガイドを取得
-    const patterns = loadGuidePatterns();
-    const allGuides = [ECOLI_GUIDE, ...patterns];
+    // 対象サイトのガイドのみを使用する（他サイトのガイドを混入させない）
+    const siteGuides = targetUrl ? getGuidesForTargetUrl(targetUrl) : null;
+    if (!siteGuides || siteGuides.length === 0) {
+      // 対象サイトのガイドが存在しない場合はガイド選択をスキップ
+      sendText(res, 200, JSON.stringify({ ok: true, selectedGuideId: null }),
+        'application/json; charset=utf-8');
+      return;
+    }
+    const allGuides = siteGuides;
     const guidesList = allGuides.map(g => ({
       guideId: g.guideId,
       title: g.title || g.guideId,
@@ -1173,7 +1283,7 @@ async function handleGenerateGuide(req, res) {
     console.log('User prompt:', prompt);
     console.log('Guides for selection:', guidesList.map(g => `${g.guideId}: ${g.title}`).join(', '));
 
-    const ollamaResponse = await callOllama(ollamaUri, modelName, phase1Prompt, apiKey);
+    const ollamaResponse = await callLLM(provider, { ollamaUri, modelName, prompt: phase1Prompt, apiKey });
 
     // JSON を抽出
     const jsonMatch = ollamaResponse.match(/\{[\s\S]*\}/);

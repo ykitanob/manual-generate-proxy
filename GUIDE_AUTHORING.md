@@ -338,3 +338,109 @@ JSON 構文エラーおよび必須フィールド（`guideId`, `steps`, `steps[
 
 `id` や `data-testid` など**変更されにくい属性**を含むセレクタが最も堅牢です。
 クラス名のみのセレクタ（`.btn-primary` 等）はリニューアルで壊れやすいためご注意ください。
+
+---
+
+## ファイル構成（2026-07-02 更新）
+
+旧構成（ルート直下の単一ファイル）からサイト別ディレクトリ構成に移行した。
+
+```
+guides/
+├── nbrc/         guide-patterns.json   ← www.nite.go.jp
+├── nanbyodata/   guide-patterns.json   ← nanbyodata.jp
+└── togodx/       guide-patterns.json   ← togodx.dbcls.jp
+```
+
+`server.js` の `SITE_GUIDE_MAP` でホスト名とディレクトリを対応付けている。  
+新しいサイトを追加する際は、`SITE_GUIDE_MAP` にホスト名を追記し、  
+`guides/<サイト名>/guide-patterns.json` を作成するだけでよい。
+
+**ガイド選択 UI の動作：**  
+inject.js は `/api/guides?url=<targetUrl>` でサーバーを呼び出し、  
+現在閲覧中のサイトに対応するガイドのみをボタン一覧として表示する。  
+未登録サイトではガイドなし表示になる。
+
+---
+
+## crawl4AI を使ったセレクタ情報の収集
+
+将来的には「Webサイトのマークダウン + JSON記述ルール + 人間用操作手順」の  
+3セットから guide-patterns.json を自動生成することを目標としている。  
+crawl4AI でWebサイトをクロールしてマークダウンを取得する場合、  
+**通常のマークダウンはCSSセレクタに必要な属性情報を捨ててしまう**。
+
+### マークダウン出力に必要な要素
+
+**HTML要素の識別情報（selector の根拠）**
+- 要素の `id` 属性（`#tblUList`, `#NANDO` 等）
+- 要素の `class` 属性（`.corr`, `.bgroup`, `.lpsn` 等）
+- 要素タグ名（`input`, `button`, `table`, `tr`, `a` 等）
+
+**属性情報（セレクタのフィルタ条件）**
+- `<a>` の `href` 値（部分一致パターン用）
+- `<input>` の `type` 属性（`text`, `checkbox`, `submit` 等）
+- `<input>` の `placeholder` テキスト
+- `<button>` の `type` 属性
+- `role` 属性（`role="checkbox"` 等）
+
+**ページ構造・階層**
+- セクション見出し（H1〜H3）と配下要素の対応関係
+- ナビゲーションメニューの項目とリンク先URL
+- フォーム要素のグループ構造
+- テーブルのヘッダー（`thead`）とデータ行（`tbody`）の構成
+
+**インタラクティブ要素のラベル**
+- ボタン・リンクの表示テキスト
+- フォームラベルと `input` の対応
+- テーブルの列ヘッダーテキスト
+
+**補足情報（セレクタの精度向上）**
+- 要素の出現順序・位置（`:nth-child` 生成用）
+- 親要素との関係（子孫セレクタ用）
+- `data-*` カスタム属性
+
+### 推奨アプローチ
+
+1. **生HTML を併用する** — crawl4AI の `fit_markdown` だけでなく生HTMLも取得し、属性情報を保持する
+2. **構造化リストとして出力する** — インタラクティブ要素（リンク・ボタン・フォーム）の属性付き一覧を別途出力する
+3. **マークダウン内にメタデータブロックを埋め込む** — HTML コメントや YAML フロントマターとして `id`/`class` を記録する
+
+---
+
+## よくある誤りと注意点
+
+### フィールド名の誤り：`"element"` vs `"selector"`
+
+Step オブジェクトの要素指定フィールドは **`"selector"`** が正しい。  
+`"element"` を使うとサーバー側で `step.selector` が `undefined` になり、  
+ガイドが `document.querySelector('')` 相当の空セレクタにフォールバックして `body` をハイライトしてしまう。
+
+```jsonc
+// NG — inject.js が認識しない
+{ "id": "go-bacteria", "element": "#menu > li:nth-child(1) > a", "action": "highlight" }
+
+// OK
+{ "id": "go-bacteria", "selector": "#menu > li:nth-child(1) > a", "action": "highlight" }
+```
+
+### セレクタの堅牢性
+
+| 優先順位 | セレクタ例 | 理由 |
+|---|---|---|
+| 高 | `#tblUList`, `input#NANDO` | id は変更されにくい |
+| 高 | `a[href='/mrinda/list/crossLink']` | 固定URLは安定 |
+| 中 | `input[type='text']`, `button[type='submit']` | 属性値は比較的安定 |
+| 低 | `.btn-primary`, `div.content > p:nth-child(3)` | クラス名・位置はリニューアルで壊れる |
+
+### `selector` が空文字の挙動
+
+- `selector: ""` + `action: "highlight"` → `description` 内の `『...』` パスで要素解決（TogoDX専用）
+- `selector: ""` + `action: "tooltip"` → Floating Tooltip（ページ操作可能）
+- `selector: "body"` → `action` 問わず Floating Tooltip扱い
+
+### JSON 構文の確認
+
+ガイドファイルは配列 `[{...}, {...}]` 形式。  
+末尾カンマ・シングルクォート・コメント (`//`) はいずれも JSON 不正になる。  
+`node proxy-server/validate-guide.js <ファイルパス>` でスキーマ検証を行うこと。

@@ -1,58 +1,58 @@
-# 開発記録：Web Guide Auto-Generator（BH26-6）
+# Development Log: Web Guide Auto-Generator (BH26-6)
 
-**期間:** 2026-07-02 〜 2026-07-03  
-**開発者:** Nakatani & Kitano（+ GitHub Copilot）
+**Period:** 2026-07-02 to 2026-07-03  
+**Developers:** Nakatani & Kitano (+ GitHub Copilot)
 
 ---
 
-## 実装内容一覧
+## Implementation List
 
-| # | 内容 | 主なファイル |
+| # | Content | Main Files |
 |---|---|---|
-| 1 | nbrc ガイドパターン追加・文法チェック | `guides/nbrc/guide-patterns.json` |
-| 2 | guide-patterns 読み込みパスを glob スキャンに変更 | `proxy-server/server.js` |
-| 3 | 未知サイト自動生成フロー（クロール→LLM→保存） | `server.js`, `crawl_pages.py` |
-| 4 | UI を1セクションに統合 | `guide-selection-prompt.json` |
-| 5 | Next.js InvariantError 修正 | `server.js` |
-| 6 | Driver.js 読み込み失敗修正 | `server.js`, `inject.js` |
+| 1 | Added nbrc guide patterns & grammar check | `guides/nbrc/guide-patterns.json` |
+| 2 | Changed guide-patterns loading path to glob scan | `proxy-server/server.js` |
+| 3 | Auto-generation flow for unknown sites (Crawl → LLM → Save) | `server.js`, `crawl_pages.py` |
+| 4 | Integrated UI into a single section | `guide-selection-prompt.json` |
+| 5 | Fixed Next.js InvariantError | `server.js` |
+| 6 | Fixed Driver.js load failure | `server.js`, `inject.js` |
 
 ---
 
-## デバッグ記録
+## Debugging Records
 
 ---
 
-### Bug 1 — `crawl_pages.py` の stderr が 500 文字で切り捨てられていた
+### Bug 1 — `crawl_pages.py` stderr was truncated at 500 characters
 
-**症状**  
-`/api/bootstrap-site` から返るエラーが途中で切れており、Python 側の実際の例外が確認できなかった。
+**Symptoms**  
+The error returned from `/api/bootstrap-site` was truncated, making it impossible to confirm the actual exception on the Python side.
 
-**原因**  
-`server.js` の `runCrawl()` 内でエラーメッセージを `.slice(0, 500)` していた。
+**Cause**  
+In `server.js`, inside `runCrawl()`, the error message was `.slice(0, 500)`.
 
 ```js
-// 修正前
+// Before fix
 reject(new Error(`crawl_pages.py exited with code ${code}: ${stderr.slice(0, 500)}`));
 
-// 修正後
+// After fix
 reject(new Error(`crawl_pages.py exited with code ${code}:\n${stderr}`));
 ```
 
-**教訓**  
-デバッグ用のエラーメッセージに文字数制限を設けると根本原因の特定が困難になる。
+**Lesson**  
+Limiting character counts for debugging error messages makes it difficult to identify the root cause.
 
 ---
 
-### Bug 2 — `guide-patterns.json` の読み込みが固定ファイルリスト依存だった
+### Bug 2 — `guide-patterns.json` loading depended on a fixed file list
 
-**症状**  
-`guides/nbrc/guide-patterns.json` 等を追加しても `/api/generate-guide` が参照しなかった。
+**Symptoms**  
+Even after adding `guides/nbrc/guide-patterns.json`, `/api/generate-guide` did not reference it.
 
-**原因**  
-`server.js` に `GUIDE_PATTERN_FILES = ['guide-patterns.json', 'togodx_guide-patterns.json']` というハードコードがあり、`guides/` サブディレクトリを走査していなかった。
+**Cause**  
+There was a hardcoded `GUIDE_PATTERN_FILES = ['guide-patterns.json', 'togodx_guide-patterns.json']` in `server.js`, and it was not scanning the `guides/` subdirectories.
 
-**修正**  
-`loadGuidePatterns()` を `fs.readdirSync(guidesDir)` で動的スキャンに変更。
+**Fix**  
+Changed `loadGuidePatterns()` to dynamically scan using `fs.readdirSync(guidesDir)`.
 
 ```js
 const subDirs = fs.readdirSync(guidesDir, { withFileTypes: true })
@@ -66,47 +66,47 @@ subDirs.forEach(sub => {
 
 ---
 
-### Bug 3 — `interceptor.js` に `function proxify` 宣言行が欠落していた
+### Bug 3 — `function proxify` declaration line was missing in `interceptor.js`
 
-**症状**  
-ページ遷移後に `fetch` / `XHR` のプロキシインターセプトが一切機能しなくなり、外部リソース取得が CORS エラーで失敗した。ただし JavaScript コンソールにはシンタックスエラーが表示されず、原因の特定が難しかった。
+**Symptoms**  
+After page transitions, proxy interception for `fetch` / `XHR` stopped working entirely, and external resource retrieval failed with CORS errors. However, no syntax errors were displayed in the JavaScript console, making the cause hard to identify.
 
-**原因（根本）**  
-`interceptor.js` に `patchCurrentScript` ブロックを追加する際、`str_replace` の `oldString` 境界が `function proxify(url) {` の宣言行を含んでいたため、置換後にその行が消失した。
+**Cause (Root)**  
+When adding the `patchCurrentScript` block to `interceptor.js`, the `oldString` boundary for `str_replace` included the declaration line `function proxify(url) {`, which caused that line to disappear after replacement.
 
 ```js
-// 欠落状態（バグ）
+// Missing state (bug)
 (function patchCurrentScript() { ... })();
 
-  if (!url) return url;   // ← function 宣言なしで関数本体だけが残った
+  if (!url) return url;   // ← Function body remains without the declaration
 ```
 
 ```js
-// 修正後
+// After fix
 (function patchCurrentScript() { ... })();
 
-function proxify(url) {   // ← 宣言行を復元
+function proxify(url) {   // ← Restored declaration line
   if (!url) return url;
 ```
 
-**教訓**  
-`str_replace` で複数ブロックを一度に置換するとき、境界行の過不足に注意が必要。今後は `multi_replace_string_in_file` で独立した置換を並列実行し、依存関係を明示する。
+**Lesson**  
+When replacing multiple blocks at once with `str_replace`, be careful with boundary lines. In the future, use `multi_replace_string_in_file` to run independent replacements in parallel and clarify dependencies.
 
 ---
 
-### Bug 4 — `patchCurrentScript` の `Object.defineProperty` 例外が後続処理をクラッシュさせた
+### Bug 4 — `patchCurrentScript`'s `Object.defineProperty` exception crashed subsequent processing
 
-**症状**  
-`interceptor.js` に Next.js 対策の `document.currentScript` オーバーライドを追加したが、環境によっては `Object.defineProperty(Document.prototype, 'currentScript', ...)` が `TypeError` を投げ、同じ IIFE 内に定義された `proxify` / `fetch` / `XHR` インターセプターがセットアップされなかった。
+**Symptoms**  
+Added a `document.currentScript` override for Next.js in `interceptor.js`, but in some environments, `Object.defineProperty(Document.prototype, 'currentScript', ...)` threw a `TypeError`, preventing the `proxify` / `fetch` / `XHR` interceptors defined in the same IIFE from being set up.
 
-**原因**  
-`Object.defineProperty` を `try-catch` なしで呼び出していたため、例外が外側の IIFE に伝播して残り処理が中断された。
+**Cause**  
+`Object.defineProperty` was called without a `try-catch`, so the exception propagated to the outer IIFE, interrupting the rest of the processing.
 
-**修正**  
-パッチ全体を `try { ... } catch(e) { /* continue */ }` で囲む。
+**Fix**  
+Wrapped the entire patch in `try { ... } catch(e) { /* continue */ }`.
 
-**最終的な解決策**  
-`patchCurrentScript` アプローチ自体を破棄し、`rewriteResourceUrls()` で `/_next/static/` 等のフレームワーク静的ファイルをプロキシ URL にラップしないよう変更（後述 Bug 5 と統合して解決）。
+**Final Solution**  
+Discarded the `patchCurrentScript` approach itself and changed `rewriteResourceUrls()` to not wrap framework static files (e.g., `/_next/static/`) in proxy URLs (integrated with Bug 5 below).
 
 ---
 

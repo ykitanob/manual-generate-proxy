@@ -2,30 +2,30 @@
   {
     "guideId": "example-guide",
     "version": 1,
-    "locale": "ja-JP",
-    "title": "サンプルガイド",
-    "description": "このファイルをコピーして guides/<サイト名>/guide-patterns.json に配置してください。",
+    "locale": "en-US",
+    "title": "Example Guide",
+    "description": "Copy this file and place it at guides/<site-name>/guide-patterns.json.",
     "steps": [
       {
         "id": "step-1",
         "selector": "body",
         "action": "tooltip",
-        "title": "ガイドへようこそ",
-        "description": "最初のステップです。"
+        "title": "Welcome to the Guide",
+        "description": "This is the first step."
       },
       {
         "id": "step-2",
         "selector": "#some-element",
         "action": "highlight",
-        "title": "要素をハイライト",
-        "description": "CSS セレクタで対象要素を指定します。"
+        "title": "Highlight Element",
+        "description": "Specify the target element using a CSS selector."
       },
       {
         "id": "step-3",
         "selector": "body",
         "action": "complete",
-        "title": "完了",
-        "description": "ガイドが完了しました。"
+        "title": "Completed",
+        "description": "The guide is now complete."
       }
     ]
   }

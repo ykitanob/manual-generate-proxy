@@ -1,16 +1,16 @@
 """
-Playwright を使ってページをクロールするサンプル。
-トップページの href リンクを1階層だけ辿り、別ファイルへ保存します。
+Sample script to crawl pages using Playwright.
+Follows href links from the top page (one level deep) and saves them to separate files.
 
-【インストール(初回のみ)】
+[Installation (first time only)]
     pip install -r requirements.txt
     playwright install chromium
 
-【使い方】
-    python crawl_github.py
-    python crawl_github.py --url https://example.com --manual-consent
+[Usage]
+    python crawl_pages.py
+    python crawl_pages.py --url https://example.com --manual-consent
 
-【出力】
+[Output]
     output/github_crawl4ai.md
     output/github_crawl4ai.html
     output/github_crawl4ai_meta.json
@@ -35,30 +35,30 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="トップページと1階層メニューリンクをクロールして保存します"
+        description="Crawls and saves the top page and one-level menu links."
     )
     parser.add_argument(
         "url",
         nargs="?",
         default=None,
-        help="クロールするトップページURL(位置引数)",
+        help="Top-level URL to crawl (positional argument)",
     )
     parser.add_argument(
         "--url",
         dest="url_option",
         default=None,
-        help="クロールするトップページURL(--url 形式)",
+        help="Top-level URL to crawl (--url format)",
     )
     parser.add_argument(
         "--manual-consent",
         action="store_true",
-        help="ブラウザを表示して手動で同意ボタンをクリックしてからクロールする",
+        help="Open the browser for manual consent (click 'Agree') before crawling.",
     )
     parser.add_argument(
         "--output-dir",
         dest="output_dir",
         default=None,
-        help="出力先ディレクトリ（省略時は output/ を使用）",
+        help="Target output directory (defaults to 'output/').",
     )
     return parser.parse_args()
 
@@ -341,24 +341,24 @@ def _crawl_single_page(page, url: str) -> dict:
     }
 
 def crawl(target_url: str, manual_consent: bool = False) -> dict:
-    print(f"[..] クロール中: {target_url}")
+    print(f"[..] Crawling: {target_url}")
     try:
         from playwright.sync_api import sync_playwright as _check
     except ImportError:
         raise RuntimeError(
-            "Playwright がインストールされていません。\n"
+            "Playwright is not installed.\n"
             "  pip install playwright\n"
             "  playwright install chromium\n"
-            "を実行してください。"
+            "Please run the above commands."
         )
 
     with sync_playwright() as pw:
         launch_args = [
             "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",                # WSL/コンテナ環境で必須
-            "--disable-dev-shm-usage",     # WSL の /dev/shm が小さい問題を回避
-            "--disable-gpu",               # WSLg で GPU レンダリングが不安定な場合に回避
-            "--start-maximized",           # ウィンドウを最大化して確実に前面表示
+            "--no-sandbox",                # Required for WSL/Container environments
+            "--disable-dev-shm-usage",     # Avoid issues with small /dev/shm in WSL
+            "--disable-gpu",               # Avoid unstable GPU rendering in WSLg
+            "--start-maximized",           # Maximize window to ensure visibility
         ]
         try:
             browser = pw.chromium.launch(
@@ -367,8 +367,8 @@ def crawl(target_url: str, manual_consent: bool = False) -> dict:
             )
         except Exception as exc:
             raise RuntimeError(
-                f"Chromium の起動に失敗しました: {exc}\n"
-                "playwright install chromium を実行してください。"
+                f"Failed to launch Chromium: {exc}\n"
+                "Please run: playwright install chromium"
             ) from exc
         context = browser.new_context(
             user_agent=(
@@ -379,22 +379,22 @@ def crawl(target_url: str, manual_consent: bool = False) -> dict:
             viewport={"width": 1280, "height": 900},
             java_script_enabled=True,
         )
-        # navigator.webdriver を隠してサイト側のボタン無効化・ガイド強制表示を防ぐ
+        # Hide navigator.webdriver to prevent detection
         context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         )
         page = context.new_page()
 
         if manual_consent:
-            print("[WAIT] ページ読み込み中...")
-            # networkidle まで待つことで React/SPA のボタンが確実に有効になる
+            print("[WAIT] Loading page...")
+            # Wait for networkidle to ensure buttons are enabled
             page.goto(target_url, wait_until="networkidle", timeout=60_000)
             page.bring_to_front()
-            page.wait_for_timeout(3000)  # SPA の localStorage 初期化まで追加待機
-            print("[WAIT] 準備完了。ブラウザでガイド選択・同意ボタンを操作してください。")
+            page.wait_for_timeout(3000)  # Wait for SPA initialization
+            print("[WAIT] Ready. Please select a guide or click consent buttons in the browser.")
             print(f"[INFO] URL: {target_url}")
-            print("[INFO] ブラウザが見えない場合: タスクバーまたは Alt+Tab で 'Chromium' を探してください。")
-            input("[INPUT] 操作完了後、Enter を押すとクロールを開始します: ")
+            print("[INFO] If the browser is not visible, look for 'Chromium' in the taskbar or via Alt+Tab.")
+            input("[INPUT] After you're done, press Enter here to start crawling: ")
 
         top_page = _crawl_single_page(page, target_url)
         html = top_page["html"]
@@ -404,10 +404,10 @@ def crawl(target_url: str, manual_consent: bool = False) -> dict:
         level1_links = _extract_level1_links(html, url)
         level1_pages: list[dict] = []
         total_links = len(level1_links)
-        print(f"[..] 1階層リンク数: {total_links}")
+        print(f"[..] Level-1 Links detect: {total_links}")
 
         for idx, link in enumerate(level1_links, start=1):
-            print(f"    [{idx}/{total_links}] 取得中: {link['url']}")
+            print(f"    [{idx}/{total_links}] Fetching: {link['url']}")
             try:
                 child = _crawl_single_page(page, link["url"])
                 child_md = _to_markdown_text(child["html"])

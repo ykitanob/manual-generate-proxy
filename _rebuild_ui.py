@@ -43,56 +43,56 @@ NEW_HTML = """\
   <h1>Guide Proxy</h1>
 
   <div class="section">
-    <h2>ガイド付きページを開く</h2>
+    <h2>Open Page with Guide</h2>
 
     <div class="field">
       <label for="proxy-url">URL</label>
       <input type="url" id="proxy-url" required value="https://www.nite.go.jp/nbrc/mrinda/list/risk/bacteria">
-      <p class="hint">既知サイト（NBRC / TogoDX / nanbyodata）はそのまま開きます。未知サイトは自動でクロール → ガイド生成を行います。</p>
+      <p class="hint">Known sites (NBRC / TogoDX / nanbyodata) will open directly. Unknown sites will be automatically crawled and a guide generated.</p>
     </div>
 
     <div class="field">
-      <label for="guide-prompt">やりたいこと（プロンプト）</label>
-      <textarea id="guide-prompt" rows="3" placeholder="例: E菌でリスク区分を調べたい"></textarea>
-      <p class="hint">既知サイト: ガイドを選択します。未知サイト: ガイド生成の指示として使われます。</p>
+      <label for="guide-prompt">What do you want to do? (Prompt)</label>
+      <textarea id="guide-prompt" rows="3" placeholder="e.g.: I want to check the risk classification for E. coli"></textarea>
+      <p class="hint">Known sites: A guide will be selected. Unknown sites: Used as instructions for guide generation.</p>
     </div>
 
     <details open>
-      <summary>⚙ LLM 設定</summary>
+      <summary>⚙ LLM Settings</summary>
       <div class="llm-fields">
         <div class="field">
-          <label for="llm-provider">プロバイダー</label>
+          <label for="llm-provider">Provider</label>
           <select id="llm-provider">
-            <option value="ollama">Ollama（ローカル）</option>
+            <option value="ollama">Ollama (Local)</option>
             <option value="openai">OpenAI</option>
             <option value="claude">Claude (Anthropic)</option>
             <option value="gemini">Gemini (Google)</option>
           </select>
         </div>
         <div id="field-ollama-uri" class="field">
-          <label for="ollama-uri">Ollama エンドポイント</label>
-          <input type="text" id="ollama-uri" placeholder="http://localhost:11434" value="http://172.27.184.54:11434">
+          <label for="ollama-uri">Ollama Endpoint</label>
+          <input type="text" id="ollama-uri" placeholder="http://localhost:11434" value="http://localhost:11434">
         </div>
         <div class="field">
-          <label for="ollama-model">モデル名</label>
+          <label for="ollama-model">Model Name</label>
           <input type="text" id="ollama-model" placeholder="zephyr:7b" value="zephyr:7b">
         </div>
         <div class="field">
-          <label for="ollama-apikey" id="label-apikey">API キー（クラウド版 https://ollama.com を使う場合のみ）</label>
-          <input type="password" id="ollama-apikey" placeholder="ローカル版は空欄のまま" value="">
+          <label for="ollama-apikey" id="label-apikey">API Key (Cloud version/Proxy only)</label>
+          <input type="password" id="ollama-apikey" placeholder="Leave blank for local Ollama" value="">
         </div>
       </div>
     </details>
 
-    <button class="primary" onclick="openWithGuide()">開く</button>
+    <button class="primary" onclick="openWithGuide()">Open</button>
     <div id="main-status"></div>
   </div>
 
   <script>
     const MODEL_PLACEHOLDERS = {
-      ollama: 'zephyr:7b',
+      ollama: 'gemma4',
       openai: 'gpt-4o-mini',
-      claude: 'claude-3-5-haiku-20241022',
+      claude: 'claude-3-5-haiku',
       gemini: 'gemini-2.0-flash'
     };
 
@@ -107,12 +107,12 @@ NEW_HTML = """\
 
       if (provider === 'ollama') {
         ollamaUriField.style.display = '';
-        apikeyLabel.textContent = 'API キー（クラウド版 https://ollama.com を使う場合のみ）';
-        apikeyInput.placeholder = 'ローカル版は空欄のまま';
+        apikeyLabel.textContent = 'API Key (only if using cloud version https://ollama.com)';
+        apikeyInput.placeholder = 'Leave blank for local';
       } else {
         ollamaUriField.style.display = 'none';
-        apikeyLabel.textContent = 'API キー（必須）';
-        apikeyInput.placeholder = provider + ' API キーを入力';
+        apikeyLabel.textContent = 'API Key (Required)';
+        apikeyInput.placeholder = 'Enter ' + provider + ' API key';
       }
     }
 
@@ -127,7 +127,7 @@ NEW_HTML = """\
 
       if (!url) {
         statusDiv.className = 'status error';
-        statusDiv.textContent = 'URLを入力してください';
+        statusDiv.textContent = 'Please enter a URL';
         return;
       }
 
@@ -136,7 +136,7 @@ NEW_HTML = """\
         statusDiv.innerHTML = `<span style="animation: pulse 1s infinite; display: inline-block;">${msg}</span>`;
       };
 
-      setLoading('サイト確認中...');
+      setLoading('Checking site...');
 
       try {
         // Step 1: Bootstrap (既知サイトは即返却、未知サイトはクロール＋ガイド生成)
@@ -148,18 +148,18 @@ NEW_HTML = """\
         const bsData = await bsResp.json();
         if (!bsResp.ok || !bsData.ok) {
           statusDiv.className = 'status error';
-          statusDiv.textContent = 'エラー: ' + (bsData.error || '不明なエラー');
+          statusDiv.textContent = 'Error: ' + (bsData.error || 'Unknown error');
           return;
         }
 
         let proxyUrl = bsData.proxyUrl;
         let statusMsg = bsData.bootstrapped
-          ? `ガイドを ${bsData.guideCount} 件生成しました。`
+          ? `Generated ${bsData.guideCount} guides.`
           : '';
 
-        // Step 2: プロンプトがある場合はガイド選択
+        // Step 2: Select guide if prompt exists
         if (prompt && modelName) {
-          setLoading('AIがガイドを選択中...');
+          setLoading('AI is selecting/generating guide...');
           try {
             const genResp = await fetch('/api/generate-guide', {
               method: 'POST',
@@ -171,12 +171,12 @@ NEW_HTML = """\
               if (genData.selectedGuideId) {
                 proxyUrl += '&guideId=' + encodeURIComponent(genData.selectedGuideId);
                 if (genData.newGuideCreated) {
-                  statusMsg += `新しいガイド「${genData.guideTitle}」を生成しました。`;
+                  statusMsg += `Generated new guide: "${genData.guideTitle}".`;
                 } else {
-                  statusMsg += `「${genData.guideTitle}」を選択しました。`;
+                  statusMsg += `Selected: "${genData.guideTitle}".`;
                 }
                 if (genData.keywords && genData.keywords.length) {
-                  statusMsg += `\n🔑 キーワード: ${genData.keywords.join(', ')}`;
+                  statusMsg += `\n🔑 Keywords: ${genData.keywords.join(', ')}`;
                 }
                 if (genData.reasoning) {
                   statusMsg += `\n💭 ${genData.reasoning}`;
@@ -188,23 +188,23 @@ NEW_HTML = """\
 
         statusDiv.className = 'status success';
         statusDiv.style.whiteSpace = 'pre-line';
-        statusDiv.textContent = (statusMsg || '') + '\\nページへ移動します...';
+        statusDiv.textContent = (statusMsg || '') + '\\nRedirecting...';
         setTimeout(() => { window.location.href = proxyUrl; }, 800);
 
       } catch (err) {
         statusDiv.className = 'status error';
-        statusDiv.textContent = 'エラー: ' + err.message;
+        statusDiv.textContent = 'Error: ' + err.message;
       }
     }
 
-    // Enter キーで送信
+    // Submit on Enter key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) openWithGuide();
     });
 
-    // プロバイダー切替イベント（インライン onchange よりイベントリスナの方が確実）
+    // Provider change event
     document.getElementById('llm-provider').addEventListener('change', updateProviderFields);
-    // 初期表示（スクリプトは body 末尾のため DOM は既に構築済み）
+    // Initial display
     updateProviderFields();
   </script>
 </body>
@@ -215,4 +215,4 @@ config['ui']['html'] = NEW_HTML
 with open(PROMPT_PATH, 'w', encoding='utf-8') as f:
     json.dump(config, f, ensure_ascii=False, indent=2)
 
-print('OK: UIを統合しました')
+print('OK: UI integrated')

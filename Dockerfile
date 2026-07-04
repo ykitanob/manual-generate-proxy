@@ -2,11 +2,11 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# 依存インストール（package.json が変わった時だけ再実行される）
+# Install dependencies (only re-runs when package.json changes)
 COPY proxy-server/package.json proxy-server/package-lock.json ./proxy-server/
 RUN cd proxy-server && npm ci --omit=dev
 
-# ソースをコピー
+# Copy source code
 COPY proxy-server/         ./proxy-server/
 COPY chrome-kakucyo/       ./chrome-kakucyo/
 COPY guide-package.schema.json ./

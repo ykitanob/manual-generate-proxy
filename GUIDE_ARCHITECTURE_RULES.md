@@ -1,12 +1,12 @@
-# LLM連携ガイド配布の実装ルール（安全版）
+# Implementation Rules for LLM-Linked Guide Delivery (Secure Version)
 
-## 1. 方針
+## 1. Policy
 
-- LLMに実行コードを書かせない
-- LLMはガイド定義JSONのみを返す
-- 実行は拡張側の固定ランタイムのみが担当する
+- Do not let the LLM write executable code.
+- The LLM only returns the guide definition JSON.
+- Execution is handled exclusively by the fixed runtime on the extension side.
 
-## 2. 全体構成
+## 2. Overall Configuration
 
 1. Content Script Runtime
 2. Extension Service Worker
@@ -14,43 +14,43 @@
 4. LLM Adapter
 5. Policy Engine
 
-## 3. 各コンポーネントの責務
+## 3. Responsibilities of Each Component
 
 ### 3.1 Content Script Runtime
 
-- ページDOMを読む
-- ガイドJSONを実行する
-- ガイドUIを表示する
-- 実行ログを送信する
+- Reads the page DOM.
+- Executes the guide JSON.
+- Displays the guide UI.
+- Sends execution logs.
 
 ### 3.2 Service Worker
 
-- Guide APIとの通信
-- 認証ヘッダー付与
-- レート制御
-- 短期キャッシュ
+- Communicates with the Guide API.
+- Adds authentication headers.
+- Rate limiting.
+- Short-term caching.
 
 ### 3.3 Guide API Server
 
-- リクエスト検証
-- LLM呼び出し
-- 生成結果の検証
-- ガイド署名
-- ガイド配信
+- Request validation.
+- LLM invocation.
+- Validation of generation results.
+- Guide signing.
+- Guide delivery.
 
 ### 3.4 LLM Adapter
 
-- プロンプト管理
-- モデル呼び出し
-- 再試行制御
+- Prompt management.
+- Model invocation.
+- Retry control.
 
 ### 3.5 Policy Engine
 
-- ドメイン別許可ルール
-- 許可操作の定義
-- 禁止セレクタ管理
+- Domain-specific permission rules.
+- Definition of allowed operations.
+- Management of prohibited selectors.
 
-## 4. メッセージ仕様
+## 4. Message Specifications
 
 ### 4.1 Runtime -> Worker
 
@@ -97,7 +97,7 @@
 - timestamp
 - result
 
-## 5. GuidePackageの推奨構造
+## 5. Recommended Structure for GuidePackage
 
 ### 5.1 トップレベル
 

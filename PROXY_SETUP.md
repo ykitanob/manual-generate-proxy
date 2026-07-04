@@ -1,29 +1,28 @@
-# プロキシサーバー セットアップガイド
+# Proxy Server Setup Guide
 
-ガイド注入プロキシサーバー（`proxy-server/server.js`）の構築・起動手順をまとめます。
-
----
-
-## 1. 概要
-
-外部サイト（TogoDX / NanbyoData / NBRC 等）を HTTP プロキシ経由で配信し、
-ページに Driver.js ベースのガイド UI を注入するローカル開発用サーバーです。
-
-- ランタイム: **Node.js**（追加ライブラリは最小限）
-- 依存: `ajv`, `ajv-formats`（ガイド JSON のスキーマ検証用）
-- 実行環境: **WSL（Ubuntu 等）上での実行を想定**
+This guide covers the procedures for building and starting the guide injection proxy server (`proxy-server/server.js`).
 
 ---
 
-## 2. 前提条件
+## 1. Overview
 
-| 項目 | 要件 |
+This is a local development server that delivers external sites (such as TogoDX, Nanbyo Data, NBRC, etc.) via an HTTP proxy and injects a Driver.js-based guide UI into the pages.
+
+- Runtime: **Node.js** (minimal additional libraries)
+- Dependencies: `ajv`, `ajv-formats` (for guide JSON schema validation)
+- Execution Environment: **Assumes execution on WSL (Ubuntu, etc.)**
+
+---
+
+## 2. Prerequisites
+
+| Item | Requirement |
 |---|---|
-| Node.js | v18 以上推奨（`fetch` / ES2020+ 構文を使用） |
-| npm | Node.js 同梱版で可 |
-| OS | WSL2（Ubuntu）を推奨。Windows ネイティブでも動作可 |
+| Node.js | v18 or higher recommended (uses `fetch` / ES2020+ syntax) |
+| npm | Version bundled with Node.js is fine |
+| OS | WSL2 (Ubuntu) recommended. Can also run on native Windows |
 
-Node.js の確認:
+Checking Node.js:
 ```bash
 node -v
 npm -v
@@ -31,72 +30,72 @@ npm -v
 
 ---
 
-## 3. 依存パッケージのインストール
+## 3. Install Dependencies
 
 ```bash
 cd /mnt/c/Users/ykita/20260629-navitest/proxy-server
 npm install
 ```
 
-`ajv` / `ajv-formats` がインストールされます。
+This will install `ajv` and `ajv-formats`.
 
 ---
 
-## 4. 環境変数
+## 4. Environment Variables
 
-| 変数 | 必須 | デフォルト | 用途 |
+| Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `PORT` | 任意 | `8080` | サーバーの待受ポート（本番運用では `18080` を使用） |
-| `GEMINI_API_KEY` | 任意 | なし | AI ガイド選択に Gemini を使う場合のみ設定 |
+| `PORT` | Optional | `8080` | Server listening port (uses `18080` for production) |
+| `GEMINI_API_KEY` | Optional | None | Set this only if using Gemini for AI guide selection |
 
-> Ollama を使う場合は API 経由（`/api/ollama-guide`）でランタイムに `ollamaUri` / `modelName` を渡すため、環境変数は不要です。
+> If using Ollama, environment variables are not required as `ollamaUri` and `modelName` are passed to the runtime via the API (`/api/ollama-guide`).
 
 ---
 
-## 5. サーバーの起動
+## 5. Starting the Server
 
-### 基本（フォアグラウンド実行・推奨）
+### Basic (Foreground execution - Recommended)
 
-WSL のシェルで以下を実行します。
+Run the following in the WSL shell:
 
 ```bash
 cd /mnt/c/Users/ykita/20260629-navitest
 PORT=18080 node proxy-server/server.js
 ```
 
-起動に成功すると次のように表示されます:
+Upon successful startup, you should see:
 
 ```
 Guide proxy is running at http://localhost:18080
 Using Ollama for guide selection
 ```
 
-停止は `Ctrl + C`。
+Stop with `Ctrl + C`.
 
-> **注意:** `nohup` / `setsid` などでバックグラウンド起動すると、WSL のワンショットコマンド経由ではセッション終了時に巻き込まれて停止する場合があります。フォアグラウンド実行が最も安定します。
+> **Note:** Running in the background with `nohup` or `setsid` via a BFS-based one-shot command might result in the process being killed when the session ends. Foreground execution is the most stable.
 
-### 起動スクリプトを使う場合
+### Using a Startup Script
 
-同梱の [start-proxy.sh](proxy-server/start-proxy.sh)（WSL/bash）を使えます。
+You can use the included [start-proxy.sh](proxy-server/start-proxy.sh) (WSL/bash).
 
 ```bash
 cd /mnt/c/Users/ykita/20260629-navitest/proxy-server
-./start-proxy.sh          # PORT=18080 で起動
-PORT=9000 ./start-proxy.sh  # ポートを変更する場合
+./start-proxy.sh          # Starts with PORT=18080
+PORT=9000 ./start-proxy.sh  # To change the port
 ```
 
-初回のみ実行権限を付与してください:
+Make sure to give it execution permissions the first time:
 ```bash
 chmod +x proxy-server/start-proxy.sh
 ```
 
 ---
 
-## 6. 動作確認
+## 6. Verification
 
-サーバー起動後、別のシェルで確認します。
+After starting the server, verify using another shell.
 
-### ガイド一覧 API
+### Guide List API
 
 ```bash
 curl -s http://localhost:18080/api/guides | head -c 400
@@ -154,7 +153,7 @@ proxy-server/
 ├── server.js                    # プロキシ本体
 ├── package.json
 ├── validate-guide.js            # ガイド JSON のスキーマ検証
-├── guide-selection-prompt.json  # AI ガイド選択用プロンプト設定
+├── guide-selection-prompt.json  # Prompt settings for AI guide selection
 ├── start-proxy.sh               # 起動スクリプト（WSL/bash）
 └── static/
     ├── inject.js                # ページ注入スクリプト（ガイド UI 制御）

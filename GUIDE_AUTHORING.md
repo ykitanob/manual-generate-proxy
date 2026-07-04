@@ -1,103 +1,102 @@
-# ガイド JSON 作成仕様書
+# Guide JSON Authoring Specifications
 
-## 概要
+## Overview
 
-本システムは Driver.js ベースのステップナビゲーションをプロキシ経由でページに注入する。
-ガイドの定義は JSON ファイルに記述し、サーバー起動時にロードされる。
+This system injects Driver.js-based step navigation into pages via a proxy.
+Guide definitions are written in JSON files and loaded during server startup.
 
 ---
 
-## ファイル構成
+## File Structure
 
-| ファイル | 対象サイト |
+| File | Target Site |
 |---|---|
-| `togodx_guide-patterns.json` | TogoDX（https://togodx.dbcls.jp） |
-| `guide-patterns.json` | NBRC 微生物有害情報リスト（https://www.nite.go.jp） |
+| `togodx_guide-patterns.json` | TogoDX (https://togodx.dbcls.jp) |
+| `guide-patterns.json` | NBRC Microbe List (https://www.nite.go.jp) |
 
-各ファイルはガイドオブジェクトの **JSON 配列** `[{...}, {...}]` として記述する。
+Each file should be written as a **JSON array** of guide objects: `[{...}, {...}]`.
 
 ---
 
-## スキーマ
+## Schema
 
 ```jsonc
 {
-  "guideId": "string",      // 一意な識別子（kebab-case 推奨）
-  "version": 1,             // スキーマバージョン（現在は 1 固定）
-  "locale": "ja-JP",        // ロケール
-  "title": "string",        // ガイド選択 UI に表示されるタイトル
-  "description": "string",  // (省略可) ガイドの概要
+  "guideId": "string",      // Unique identifier (kebab-case recommended)
+  "version": 1,             // Schema version (currently fixed at 1)
+  "locale": "en-US",        // Locale
+  "title": "string",        // Title displayed in the guide selection UI
+  "description": "string",  // (Optional) Overview of the guide
   "steps": [ /* Step[] */ ]
 }
 ```
 
 ---
 
-## Step オブジェクト
+## Step Object
 
 ```jsonc
 {
-  "id": "step-N",           // ステップ識別子（連番推奨）
-  "selector": "string",     // CSS セレクタ（後述）
+  "id": "step-N",           // Step identifier (sequential numbering recommended)
+  "selector": "string",     // CSS selector (see below)
   "action": "string",       // "highlight" | "tooltip" | "complete"
-  "title": "string",        // ポップオーバーのタイトル
-  "description": "string",  // ポップオーバーの本文（HTML タグ使用可）
-  "placement": "string"     // (省略可) "top" | "bottom" | "left" | "right"
+  "title": "string",        // Title of the popover
+  "description": "string",  // Body text of the popover (HTML tags allowed)
+  "placement": "string"     // (Optional) "top" | "bottom" | "left" | "right"
 }
 ```
 
 ---
 
-## `selector` フィールドの仕様
+## `selector` Field Specifications
 
-`selector` と `action` の組み合わせによって Driver.js への渡し方が切り替わる。
+The way parameters are passed to Driver.js changes based on the combination of `selector` and `action`.
 
-### パターン A — 実要素を直接指定
+### Pattern A — Direct Element Specification
 
 ```json
 "selector": "button[data-testid='result-button'], button[type='submit']",
 "action": "highlight"
 ```
 
-`querySelector` で解決し、見つかった要素をハイライトする。
-複数セレクタはカンマ区切りで指定可能（先にマッチした要素が優先）。
+Resolved via `querySelector`, and the found element is highlighted.
+Multiple selectors can be specified, separated by commas (the first match takes priority).
 
-### パターン B — `description` パスからの自動解決（TogoDX 専用）
+### Pattern B — Auto-Resolution from `description` Path (TogoDX Specific)
 
 ```json
 "selector": "",
 "action": "highlight"
 ```
 
-`selector` が空文字かつ `action: "highlight"` の場合、`description` フィールド内の
-**`『A → B → C』` 形式の文字列**を解析してターゲット要素を決定する。
+If `selector` is an empty string and `action: "highlight"`, the target element is determined by parsing the **`『A → B → C』` formatted string** within the `description` field.
 
-解決アルゴリズムの優先順位：
+Resolution algorithm priority:
 
-| 優先度 | 対象 | マッチング方法 |
+| Priority | Target | Matching Method |
 |---|---|---|
-| 1 | `li.track-filter-view[data-node]` の `span.label` | テキスト完全一致 / 部分一致 |
-| 2 | `.attribute-track-view h2.title` | テキスト完全一致 / 部分一致（`data-category-id` でスコープを絞る） |
-| 3 | `[data-node]` 属性値 | 正規化後マッチ（スペース・アンダースコア等を除去して比較） |
-| 4 | `[title]` / `[aria-label]` 属性値 | 部分一致 |
-| 5 | `.label`, `.title`, `span`, `li`, `h2`, `h3` 等のテキスト | 完全一致 / 部分一致 |
-| 最終 | `h3[data-category-id="${catId}"]` | カテゴリヘッダー全体を返す |
+| 1 | `li.track-filter-view[data-node]`'s `span.label` | Exact / Partial text match |
+| 2 | `.attribute-track-view h2.title` | Exact / Partial text match (scoped by `data-category-id`) |
+| 3 | `[data-node]` attribute value | Match after normalization (removing spaces, underscores, etc.) |
+| 4 | `[title]` / `[aria-label]` attribute values | Partial match |
+| 5 | `.label`, `.title`, `span`, `li`, `h2`, `h3`, etc. text | Exact / Partial match |
+| Final | `h3[data-category-id="${catId}"]` | Returns the entire category header |
 
-**パス形式の規則：**
-- `『』`（二重鉤括弧）で囲む
-- 階層区切りは ` → `（全角矢印・前後スペース）
-- 先頭要素がカテゴリヒント（`gene`, `protein`, `disease` 等）として使われる
-- 検索は**末尾（最も具体的）のキーワードから**順に試みる
+**Path Format Rules:**
+- Enclosed in `『』` (double angle brackets)
+- Hierarchy separator is ` → ` (arrow with spaces)
+- The first element is used as a category hint (e.g., `gene`, `protein`, `disease`)
+- Search is performed starting from the **last (most specific) keyword**
 
 ```
 『Gene → Tissue-specific high expression (HPA) → Lung』
-  ↓ 抽出
+  ↓ Extraction
 ['Gene', 'Tissue-specific high expression (HPA)', 'Lung']
-  ↓ 検索順
+  ↓ Search Order
 Lung → Tissue-specific high expression (HPA) → Gene
 ```
 
-**使用可能なエイリアス（inject.js 内で定義）：**
+**Available Aliases (Defined in inject.js):**
 
 | 入力 | 自動的に追加されるバリアント |
 |---|---|

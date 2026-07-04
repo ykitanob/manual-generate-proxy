@@ -30,7 +30,7 @@
 
     popoverEl.dataset.guideProxyDraggable = '1';
     handle.style.cursor = 'move';
-    handle.title = 'ドラッグして移動できます';
+    handle.title = 'Drag to move';
 
     handle.addEventListener('mousedown', (ev) => {
       if (ev.button !== 0) return;
@@ -103,17 +103,17 @@
     if (collapsed) {
       content.style.display = 'none';
       menu.style.padding = '8px 10px';
-      title.textContent = 'ガイド選択';
+      title.textContent = 'Guides';
       toggle.textContent = '＋';
-      toggle.setAttribute('aria-label', 'ガイド選択パネルを展開');
-      toggle.title = '展開';
+      toggle.setAttribute('aria-label', 'Expand guide selection panel');
+      toggle.title = 'Expand';
     } else {
       content.style.display = 'block';
       menu.style.padding = '12px';
-      title.textContent = 'ガイド選択：';
+      title.textContent = 'Select Guide:';
       toggle.textContent = '－';
-      toggle.setAttribute('aria-label', 'ガイド選択パネルを最小表示');
-      toggle.title = '最小表示';
+      toggle.setAttribute('aria-label', 'Collapse guide selection panel');
+      toggle.title = 'Collapse';
     }
 
     try {
@@ -200,6 +200,32 @@
         return;
       }
 
+  async function submitConsentViaProxy(sourceUrl, fallbackUrl) {
+    const csrfToken = getCsrfTokenFromPage();
+    if (!csrfToken) {
+      location.href = fallbackUrl;
+      return;
+    }
+
+    try {
+      const form = new URLSearchParams();
+      form.set('sourceUrl', sourceUrl);
+      form.set('_csrfToken', csrfToken);
+
+      const resp = await fetch(`${location.origin}/consent`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: form.toString(),
+        credentials: 'include'
+      });
+
+      if (!resp.ok) {
+        location.href = fallbackUrl;
+        return;
+      }
+
       const data = await resp.json();
       if (data && data.redirectProxyUrl) {
         location.href = data.redirectProxyUrl;
@@ -214,7 +240,10 @@
 
   function wireConsentButton() {
     const agreeBtn = document.getElementById('btOk')
-      || Array.from(document.querySelectorAll('a')).find((a) => (a.textContent || '').trim() === '同意する');
+      || Array.from(document.querySelectorAll('a')).find((a) => {
+        const txt = (a.textContent || '').trim();
+        return txt === '同意する' || txt === 'Agree';
+      });
     if (!agreeBtn) return;
 
     const targetUrl = getTargetUrl();
@@ -227,19 +256,19 @@
       return;
     }
 
-    // 元URLが /nbrc 配下ならそれを維持する
+    // Maintain the /nbrc path if it exists in the original URL
     const basePrefix = parsed.pathname.includes('/nbrc/mrinda/') ? '/nbrc/mrinda' : '/mrinda';
     const agreedUrl = `${parsed.origin}${basePrefix}/list/risk/bacteria/E`;
     const proxiedAgreedUrl = `${location.origin}/proxy?url=${encodeURIComponent(agreedUrl)}`;
 
-    // まずリンク自体を書き換えて、通常クリックでも遷移できるようにする
+    // Rewrite the link itself for normal navigation
     agreeBtn.setAttribute('href', proxiedAgreedUrl);
     agreeBtn.setAttribute('target', '_self');
     agreeBtn.removeAttribute('onclick');
     agreeBtn.onclick = null;
 
     agreeBtn.addEventListener('click', async (ev) => {
-      // 元ページ側の同意クリック処理が動かない場合のフォールバック
+      // Fallback if the site's own consent logic doesn't trigger
       const hasTable = !!document.querySelector('#tblUList');
       if (hasTable) return;
 
@@ -248,7 +277,7 @@
       await submitConsentViaProxy(targetUrl, proxiedAgreedUrl);
     }, { capture: true });
 
-    // Enter キー操作でも同じ遷移に揃える
+    // Handle Enter key for consistency
     agreeBtn.addEventListener('keydown', async (ev) => {
       if (ev.key !== 'Enter') return;
       ev.preventDefault();
@@ -512,7 +541,7 @@
     const title = document.createElement('div');
     title.id = 'guide-proxy-menu-title';
     title.style.cssText = 'font-weight: bold; margin-bottom: 8px; font-size: 14px;';
-    title.textContent = 'ガイド選択：';
+    title.textContent = 'Select Guide:';
     header.appendChild(title);
 
     const toggle = document.createElement('button');
@@ -560,10 +589,10 @@
     wireConsentButton();
     ensureGuideSelectionMenu();
 
-    // guideId URLパラメータがあれば、自動的にツアーを開始
+    // If guideId is in the URL parameters, start the tour automatically
     const autoGuideId = getGuideId();
     if (autoGuideId) {
-      // ページの読み込みが完全に完了してから起動（遅延）
+      // Delay to ensure the page is fully loaded
       setTimeout(() => {
         startGuideById(autoGuideId);
         setGuideMenuCollapsed(true);
@@ -578,8 +607,8 @@
     const container = document.getElementById('guide-proxy-menu-buttons');
     if (!container) return;
 
-    // ローディング表示
-    container.innerHTML = '<div style="font-size:12px;color:#666;padding:4px 0;">読み込み中...</div>';
+    // Loading display
+    container.innerHTML = '<div style="font-size:12px;color:#666;padding:4px 0;">Loading...</div>';
 
     try {
       const targetUrl = getTargetUrl();
@@ -587,13 +616,13 @@
         + (targetUrl ? '?url=' + encodeURIComponent(targetUrl) : '');
       const resp = await fetch(apiUrl, { credentials: 'include' });
       if (!resp.ok) {
-        container.innerHTML = `<div style="font-size:12px;color:red;padding:4px 0;">エラー: HTTP ${resp.status}</div>`;
+        container.innerHTML = `<div style="font-size:12px;color:red;padding:4px 0;">Error: HTTP ${resp.status}</div>`;
         return;
       }
 
       const data = await resp.json();
       if (!data.guides || !Array.isArray(data.guides) || data.guides.length === 0) {
-        container.innerHTML = '<div style="font-size:12px;color:#666;padding:4px 0;">ガイドなし</div>';
+        container.innerHTML = '<div style="font-size:12px;color:#666;padding:4px 0;">No guides available</div>';
         return;
       }
 
@@ -623,7 +652,7 @@
         container.appendChild(btn);
       });
     } catch (err) {
-      container.innerHTML = `<div style="font-size:12px;color:red;padding:4px 0;">取得失敗: ${err.message}</div>`;
+      container.innerHTML = `<div style="font-size:12px;color:red;padding:4px 0;">Fetch failed: ${err.message}</div>`;
       console.warn('Failed to fetch guides:', err);
     }
   }
@@ -635,40 +664,40 @@
         + (targetUrl ? '?url=' + encodeURIComponent(targetUrl) : '');
       const resp = await fetch(apiUrl, { credentials: 'include' });
       if (!resp.ok) {
-        alert('ガイドの読み込みに失敗しました');
+        alert('Failed to load guide');
         return;
       }
 
       const guideJSON = await resp.json();
       startGuideWithJSON(guideJSON);
     } catch (err) {
-      alert('ガイド読み込みエラー: ' + err.message);
+      alert('Guide load error: ' + err.message);
     }
   }
 
   function startGuideWithJSON(guideJSON) {
     if (!window.driver || !window.driver.js || typeof window.driver.js.driver !== 'function') {
-      alert('Driver.js の読み込みに失敗しました。');
+      alert('Failed to load Driver.js.');
       return;
     }
 
     if (!guideJSON.steps || guideJSON.steps.length === 0) {
-      alert('ガイドにステップが定義されていません');
+      alert('No steps defined in guide');
       return;
     }
 
     const drv = window.driver.js.driver({
       showProgress: true,
       allowClose: true,
-      nextBtnText: '次へ',
-      prevBtnText: '前へ',
-      doneBtnText: '完了',
+      nextBtnText: 'Next',
+      prevBtnText: 'Back',
+      doneBtnText: 'Done',
       progressText: '{{current}} / {{total}}'
     });
 
     enableDriverPopoverDragging();
 
-    // JSON ステップを Driver.js フォーマットに変換
+    // Translate JSON steps to Driver.js format
     const driverSteps = guideJSON.steps.map(step => {
       const popoverConfig = {
         title: step.title || '',
@@ -676,7 +705,7 @@
         align: 'start'
       };
 
-      // description が HTML を含む場合、descriptionElement を使う
+      // If description contains HTML, use descriptionElement
       if (step.description && step.description.includes('<')) {
         popoverConfig.descriptionElement = document.createElement('div');
         popoverConfig.descriptionElement.innerHTML = step.description;
@@ -684,10 +713,10 @@
         popoverConfig.description = step.description || '';
       }
 
-      // action / selector によってステップの動作を切り替える
-      // 実要素セレクタ（body・空文字以外）がある → 常に要素をハイライト
-      // 実要素セレクタなし + action が "highlight" → description パスから要素を解決
-      // 実要素セレクタなし + action が "tooltip" / "complete" / 未設定 → floating tooltip
+      // Logic to determine step behavior based on action / selector
+      // If a real selector (not body/empty) is provided -> always highlight the element
+      // If no real selector + action is "highlight" -> resolve element from description path
+      // If no real selector + action is "tooltip" / "complete" / unspecified -> floating tooltip
       const capturedStep = step;
       const hasRealSelector = step.selector && step.selector !== 'body';
       const isFloating = !hasRealSelector && step.action !== 'highlight';
@@ -698,17 +727,20 @@
       return driverStep;
     });
 
-    // どのガイドでも、最初に「同意する」ボタンを押す必要がある。
-    // 同意ボタンがページに存在する場合（＝未同意）、先頭に同意ステップを追加する。
+    // For any guide, the user must first click "Agree" if the button is present.
+    // Add a consent step to the beginning if the button is found.
     const consentBtn = document.getElementById('btOk')
       || Array.from(document.querySelectorAll('a, button, input[type="submit"]'))
-        .find((el) => ((el.textContent || el.value || '').trim() === '同意する'));
+        .find((el) => {
+          const txt = (el.textContent || el.value || '').trim();
+          return txt === '同意する' || txt === 'Agree';
+        });
     if (consentBtn) {
       driverSteps.unshift({
         element: consentBtn,
         popover: {
-          title: 'まず「同意する」を押してください',
-          description: 'ご利用にあたって、最初にこの「同意する」ボタンをクリックする必要があります。同意後、目的のページへ進みます。',
+          title: 'Please click "Agree" first',
+          description: 'Before you begin, you must first click this "Agree" button to proceed. You will then be directed to the target page.',
           side: 'bottom',
           align: 'start'
         }
@@ -721,20 +753,23 @@
 
   function startGuide(resumeAfterE) {
     if (!window.driver || !window.driver.js || typeof window.driver.js.driver !== 'function') {
-      alert('Driver.js の読み込みに失敗しました。');
+      alert('Failed to load Driver.js.');
       return;
     }
 
     const eButton = findEButton();
-    const isEAlreadySelected = Array.from(document.querySelectorAll('li.current')).some((li) => (li.textContent || '').trim() === 'E');
+    const isEAlreadySelected = Array.from(document.querySelectorAll('li.current')).some((li) => {
+      const txt = (li.textContent || '').trim();
+      return txt === 'E';
+    });
 
     const steps = [
       {
         stepId: 'intro',
         element: findBacteriaLink,
         popover: {
-          title: 'ガイドへようこそ',
-          description: 'このページで E. coli を検索する流れを案内します。'
+          title: 'Welcome to the guide',
+          description: 'I will guide you through searching for E. coli on this page.'
         }
       }
     ];
@@ -744,8 +779,8 @@
         stepId: 'e',
         element: findEButton,
         popover: {
-          title: '「E」ボタン',
-          description: 'E をクリックすると E 始まりの一覧に移動します。',
+          title: '"E" Button',
+          description: 'Clicking E will take you to the list of organisms starting with E.',
           side: 'bottom',
           align: 'center'
         },
@@ -757,8 +792,8 @@
       steps.push({
         stepId: 'e-skip',
         popover: {
-          title: '「E」ボタン（スキップ）',
-          description: 'このページはすでに E 選択済みなので、次へ進みます。'
+          title: '"E" Button (Skipped)',
+          description: "This page already has E selected, so we'll move to the next step."
         }
       });
     }
@@ -769,7 +804,7 @@
         element: findSearchInput,
         popover: {
           title: 'Search',
-          description: '検索欄に E coli と入力してください。',
+          description: 'Enter "E coli" in the search field.',
           side: 'bottom',
           align: 'start'
         },
@@ -781,15 +816,15 @@
         stepId: 'table',
         element: '#tblUList',
         popover: {
-          title: '細菌リスト一覧',
-          description: '学名や区分情報を確認できます。'
+          title: 'Bacteria List',
+          description: 'You can check scientific names and classification information.',
         }
       },
       {
         stepId: 'done',
         popover: {
-          title: 'ガイド完了',
-          description: '以上で手順は完了です。'
+          title: 'Guide Finished',
+          description: "That's all for the steps."
         }
       }
     );
@@ -797,9 +832,9 @@
     const drv = window.driver.js.driver({
       showProgress: true,
       allowClose: true,
-      nextBtnText: '次へ',
-      prevBtnText: '前へ',
-      doneBtnText: '完了',
+      nextBtnText: 'Next',
+      prevBtnText: 'Back',
+      doneBtnText: 'Done',
       progressText: '{{current}} / {{total}}',
       steps
     });

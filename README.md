@@ -1,102 +1,102 @@
 # Web Guide Auto-Generator
 
-**BH26-6（国内版バイオハッカソン 2026-06）成果物**  
-作者: Nakatani & Kitano
+**BH26-6 (BioHackathon Japan 2026-06) Deliverable**  
+Authors: Nakatani & Kitano
 
 ---
 
-## 概要
+## Overview
 
-使い方の分かりづらい Web ツールの操作ガイドを **LLM で自動生成** し、ページ上に表示するツールです。
+This tool **automatically generates operation guides** for complex Web tools using LLMs and displays them directly on the page.
 
-プロキシサーバーを経由して対象 URL を閲覧することで、ページを改変せずにガイド UI を注入します。  
-未知の Web サイトに対しては、ページを自動クロールし、その結果を LLM（Ollama）に読み込ませてガイドを生成します。  
-ガイドの表示には **[Driver.js](https://driverjs.com/)** を使用しています。
+By browsing the target URL through a proxy server, it injects the guide UI without modifying the original page.  
+For unknown websites, it automatically crawls the pages, feeds the results to an LLM (Ollama), and generates the guide.  
+**[Driver.js](https://driverjs.com/)** is used to display the guides.
 
 ```
-ブラウザ → プロキシサーバー → 対象 Web サイト
+Browser → Proxy Server → Target Website
                 ↓
-        HTML にガイド UI を注入
+        Inject Guide UI into HTML
                 ↓
-        Driver.js でステップ表示
+        Display steps with Driver.js
 ```
 
 ---
 
-## クイックスタート
+## Quick Start
 
-### 1. 依存パッケージのインストール
+### 1. Install Dependencies
 
 ```bash
 cd proxy-server
 npm install
 ```
 
-Python 側（クロール用）:
+Python side (for crawling):
 
 ```bash
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-### 2. サーバー起動
+### 2. Start the Server
 
 ```bash
 PORT=18080 node proxy-server/server.js
 ```
 
-### 3. ブラウザでアクセス
+### 3. Access via Browser
 
 ```
 http://localhost:18080
 ```
 
-URL・Ollama エンドポイント・プロンプトを入力して「開く」を押すとプロキシ経由でページが開きます。
+Enter the URL, Ollama endpoint, and prompt, then click "Open" to access the page via the proxy.
 
 ---
 
-## 機能一覧
+## Features
 
-| 機能 | 説明 |
+| Feature | Description |
 |---|---|
-| プロキシ配信 | 対象 URL を HTTP プロキシ経由で配信し、HTML に Driver.js ガイドを注入 |
-| 既知サイトのガイド選択 | ユーザーのプロンプトを LLM に渡し、既存ガイドから最適なものを自動選択 |
-| 未知サイトのガイド自動生成 | クロール → LLM によるガイド JSON 生成 → `guides/{ドメイン}/guide-patterns.json` として保存 |
-| セッション管理 | Cookie をプロキシ側でセッション保持し、ログイン状態のまま閲覧可能 |
+| Proxy Delivery | Delivers target URLs via HTTP proxy and injects Driver.js guides into HTML |
+| Guide Selection for Known Sites | Passes user prompts to an LLM to automatically select the best existing guide |
+| Auto-Generation for Unknown Sites | Crawls → Generates guide JSON with LLM → Saves as `guides/{domain}/guide-patterns.json` |
+| Session Management | Maintains session state with cookies on the proxy side, allowing browsing while logged in |
 
 ---
 
-## システム構成
+## System Architecture
 
 ```
 20260629-navitest/
 ├── proxy-server/
-│   ├── server.js               # プロキシサーバー本体（Node.js）
-│   ├── package.json            # 依存: ajv, ajv-formats, driver.js
-│   ├── guide-selection-prompt.json   # LLM プロンプトテンプレート & ホーム画面 UI
-│   ├── validate-guide.js       # ガイド JSON のスキーマ検証
+│   ├── server.js               # Proxy server core (Node.js)
+│   ├── package.json            # Deps: ajv, ajv-formats, driver.js
+│   ├── guide-selection-prompt.json   # LLM prompt template & home screen UI
+│   ├── validate-guide.js       # Schema validation for guide JSON
 │   └── static/
-│       ├── inject.js           # ページに注入するガイド UI スクリプト
-│       ├── inject.css          # ガイドメニューのスタイル
-│       └── interceptor.js      # fetch / XHR をプロキシ経由にリダイレクト
+│       ├── inject.js           # Guide UI script injected into pages
+│       ├── inject.css          # Styles for the guide menu
+│       └── interceptor.js      # Redirects fetch / XHR through the proxy
 ├── guides/
 │   ├── nbrc/
-│   │   └── guide-patterns.json # NBRC 微生物リスト用ガイド定義
+│   │   └── guide-patterns.json # Guide definitions for NBRC Microbe List
 │   ├── togodx/
-│   │   └── guide-patterns.json # TogoDX 用ガイド定義
+│   │   └── guide-patterns.json # Guide definitions for TogoDX
 │   ├── nanbyodata/
-│   │   └── guide-patterns.json # 難病データベース用ガイド定義
-│   └── {ドメイン}/              # 未知サイトを開くと自動生成
+│   │   └── guide-patterns.json # Guide definitions for Nanbyo Data
+│   └── {domain}/              # Auto-generated when opening unknown sites
 │       └── guide-patterns.json
-├── crawl_pages.py              # Playwright によるページクロールスクリプト
-├── GUIDE_AUTHORING.md          # ガイド JSON 作成仕様書
-├── guide-package.schema.json   # ガイド JSON スキーマ定義
-└── requirements.txt            # Python 依存パッケージ
+├── crawl_pages.py              # Page crawling script using Playwright
+├── GUIDE_AUTHORING.md          # Guide JSON authoring specifications
+├── guide-package.schema.json   # Guide JSON schema definition
+└── requirements.txt            # Python dependencies
 ```
 
 ---
 
-## ガイドの自動生成フロー（未知サイト）
+## Auto-Generation Flow (Unknown Sites)
 
 ```
 1. ユーザーが未知 URL を入力して「開く」

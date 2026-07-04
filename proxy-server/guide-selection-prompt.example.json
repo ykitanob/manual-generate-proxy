@@ -1,10 +1,10 @@
 {
   "phase1": {
-    "description": "既存ガイドから最適なものを選択し、推測理由を説明するプロンプト",
-    "template": "以下は既存のガイド一覧です：\n{GUIDES_LIST}\n\nユーザーのリクエスト：\"{USER_PROMPT}\"\n\n【指示】\n1. ユーザーのリクエストを分析し、最も適切な既存ガイドを選択してください\n2. 推測に使った重要なキーワード（3-5個）をリストアップしてください\n3. 選択したガイドを、ユーザーの入力からどう推測したかを1-2文で説明してください\n4. 必ず以下の JSON 形式で返してください\n\n{\n  \"selectedGuideId\": \"選択したガイドのID\",\n  \"guideTitle\": \"選択したガイドのタイトル\",\n  \"keywords\": [\"キーワード1\", \"キーワード2\", \"キーワード3\"],\n  \"reasoning\": \"ユーザーの入力から選択理由を日本語で説明（2-3文）\",\n  \"needsNewGuide\": false\n}\n\nJSON のみを返してください。他の説明は不要です。"
+    "description": "Prompt to select the best existing guide and explain the reasoning.",
+    "template": "Below is a list of existing guides:\n{GUIDES_LIST}\n\nUser request: \"{USER_PROMPT}\"\n\n【Instructions】\n1. Analyze the user's request and select the most appropriate existing guide.\n2. List the important keywords (3-5) used for the selection.\n3. Briefly explain (1-2 sentences) how you inferred the guide from the user's input.\n4. You MUST return in the following JSON format:\n\n{\n  \"selectedGuideId\": \"ID of the selected guide\",\n  \"guideTitle\": \"Title of the selected guide\",\n  \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\"],\n  \"reasoning\": \"Explain the reason for selection in English based on the user's input (2-3 sentences)\",\n  \"needsNewGuide\": false\n}\n\nReturn ONLY the JSON. No other explanation is needed."
   },
   "ui": {
-    "description": "ホームページUI定義 — サイトに合わせて url の value を変更してください",
-    "html": "<!doctype html>\n<html lang=\"ja\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Guide Proxy</title>\n</head>\n<body>\n  <h1>Guide Proxy</h1>\n  <form action=\"/proxy\" method=\"get\">\n    <input type=\"url\" name=\"url\" required value=\"https://example.com/\">\n    <button type=\"submit\">開く</button>\n  </form>\n</body>\n</html>"
+    "description": "Homepage UI definition — Change the 'url' value to match your site.",
+    "html": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Guide Proxy</title>\n</head>\n<body>\n  <h1>Guide Proxy</h1>\n  <form action=\"/proxy\" method=\"get\">\n    <input type=\"url\" name=\"url\" required value=\"https://example.com/\">\n    <button type=\"submit\">Open</button>\n  </form>\n</body>\n</html>"
   }
 }

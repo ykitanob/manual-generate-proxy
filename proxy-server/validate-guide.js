@@ -3,17 +3,17 @@
 /**
  * validate-guide.js
  *
- * GuidePackage サーバー側バリデーション (Node.js + AJV)
+ * GuidePackage server-side validation (Node.js + AJV)
  *
- * 依存:
+ * Dependencies:
  *   npm install ajv ajv-formats
  *
- * 使い方:
+ * Usage:
  *   const { validateGuidePackage, verifySignature } = require('./validate-guide');
  *
  *   const result = validateGuidePackage(guidePackageObj);
  *   if (!result.valid) {
- *     console.error(result.errors);  // AJV エラー配列
+ *     console.error(result.errors);  // AJV error array
  *   }
  */
 
@@ -22,7 +22,7 @@ const fs   = require('fs');
 const Ajv  = require('ajv');
 const addFormats = require('ajv-formats');
 
-// ---------- スキーマ読み込み ----------
+// ---------- Load Schema ----------
 
 const SCHEMA_PATH = path.resolve(__dirname, '../guide-package.schema.json');
 
@@ -35,7 +35,7 @@ function loadSchema() {
   return _schema;
 }
 
-// ---------- AJV インスタンス ----------
+// ---------- AJV Instance ----------
 
 let _ajv;
 let _compiledValidate;
@@ -43,11 +43,11 @@ let _compiledValidate;
 function getValidator() {
   if (!_compiledValidate) {
     _ajv = new Ajv({
-      allErrors:   true,   // 全エラーを収集（最初の1件で止めない）
-      strict:      false,  // JSON Schema Draft 2020-12 の未知キーワードを許容
-      verbose:     true,   // エラーに data/parentData を付与
+      allErrors:   true,   // Collect all errors (don't stop at first)
+      strict:      false,  // Allow unknown keywords in JSON Schema Draft 2020-12
+      verbose:     true,   // Attach data/parentData to errors
     });
-    addFormats(_ajv);      // date-time, uri 等のフォーマット検証を有効化
+    addFormats(_ajv);      // Enable validation for formats like date-time, uri, etc.
 
     const schema = loadSchema();
     _compiledValidate = _ajv.compile(schema);
@@ -55,12 +55,12 @@ function getValidator() {
   return _compiledValidate;
 }
 
-// ---------- メインエクスポート ----------
+// ---------- Main Exports ----------
 
 /**
- * GuidePackage オブジェクトを JSON Schema で検証する。
+ * Validate GuidePackage object against JSON Schema.
  *
- * @param {unknown} data  LLM 出力など、検証対象の生データ
+ * @param {unknown} data Raw data to validate (e.g., LLM output)
  * @returns {{ valid: boolean, errors: import('ajv').ErrorObject[] | null }}
  */
 function validateGuidePackage(data) {
@@ -73,14 +73,14 @@ function validateGuidePackage(data) {
 }
 
 /**
- * GuidePackage の署名を検証するスタブ。
+ * Stub for verifying GuidePackage signature.
  *
- * 本番実装では HMAC-SHA256 または RSA 署名検証に置き換える。
- * GUIDE_ARCHITECTURE_RULES.md §7 参照。
+ * Replace this with HMAC-SHA256 or RSA signature verification in production.
+ * See GUIDE_ARCHITECTURE_RULES.md §7.
  *
- * @param {object} guidePackage  署名済み GuidePackage
- * @param {string} signingSecret 署名検証キー（環境変数で注入すること）
- * @returns {boolean} 署名が有効なら true
+ * @param {object} guidePackage Signed GuidePackage
+ * @param {string} signingSecret Signature verification key (inject via environment variable)
+ * @returns {boolean} true if signature is valid
  */
 function verifySignature(guidePackage, signingSecret) {
   if (!guidePackage || typeof guidePackage.signature !== 'string') {
@@ -90,8 +90,8 @@ function verifySignature(guidePackage, signingSecret) {
     throw new Error('SIGNING_SECRET is not set');
   }
 
-  // ---- TODO: 以下を実際の署名検証ロジックに置き換える ----
-  // 例: HMAC-SHA256
+  // ---- TODO: Replace with actual signature verification logic ----
+  // Example: HMAC-SHA256
   //
   //   const crypto = require('crypto');
   //   const payload = JSON.stringify({ ...guidePackage, signature: undefined });

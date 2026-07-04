@@ -5,11 +5,11 @@ services:
       - "8082:8082"
     environment:
       PORT: 8082
-    # ホストのソースをコンテナにマウント → コード変更が即反映（node再起動で有効）
+    # Mount host source code to container -> Code changes reflected quickly (Node restart required)
     volumes:
       - ./proxy-server:/app/proxy-server
       - ./chrome-kakucyo:/app/chrome-kakucyo
       - ./guide-package.schema.json:/app/guide-package.schema.json:ro
       - ./guides:/app/guides:ro
-      # node_modules はコンテナ側を使う（ホスト側で上書きしない）
+      # Use the container's node_modules (do not overwrite with host's)
       - /app/proxy-server/node_modules

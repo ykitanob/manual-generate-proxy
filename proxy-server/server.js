@@ -12,47 +12,47 @@ const SESSION_COOKIE_NAME = 'GUIDEPROXYSID';
 const MAX_REDIRECTS = 5;
 const sessions = new Map();
 
-// E coli ガイド JSON定義
+// E. coli Guide JSON definition
 const ECOLI_GUIDE = {
   guideId: 'nite-bacteria-ecoli-search',
   version: 1,
-  locale: 'ja-JP',
-  title: 'E. coli を検索',
+  locale: 'en-US',
+  title: 'Search for E. coli',
   steps: [
     {
       id: 'intro',
       selector: 'body',
       action: 'tooltip',
-      title: 'E. coli ガイド',
-      description: 'このガイドでは「E. coli」を検索する手順を案内します。'
+      title: 'E. coli Guide',
+      description: 'This guide provides instructions on how to search for "E. coli".'
     },
     {
       id: 'e-button',
       selector: 'a[title="E"]',
       action: 'highlight',
-      title: '「E」ボタンをクリック',
-      description: '対象の微生物の頭文字をクリックします。「E」をクリックすると E で始まる細菌が表示されます。'
+      title: 'Click the "E" Button',
+      description: 'Click the initial letter of the target microorganism. Clicking "E" will display bacteria starting with E.'
     },
     {
       id: 'search',
       selector: 'input[type="text"]',
       action: 'highlight',
-      title: 'Search（絞り込み検索）',
-      description: 'ここに菌名を入力すると一覧をリアルタイムで絞り込めます。例：<strong>E coli</strong> と入力してみましょう。'
+      title: 'Search (Filtering)',
+      description: 'Enter the bacteria name here to filter the list in real-time. Example: Try typing <strong>E coli</strong>.'
     },
     {
       id: 'bacteria-list',
       selector: '#tblUList',
       action: 'highlight',
-      title: '細菌リスト一覧',
-      description: '学名・BSL区分・法規制情報がまとまっています。行をクリックすると詳細ページへ遷移します。'
+      title: 'Bacteria List',
+      description: 'Scientific names, BSL classifications, and regulatory information are summarized here. Click a row to go to the details page.'
     },
     {
       id: 'done',
       selector: 'body',
       action: 'complete',
-      title: 'ガイド完了',
-      description: 'E. coli ガイドの説明は終わりです。'
+      title: 'Guide Completed',
+      description: 'The E. coli guide overview is finished.'
     }
   ]
 };
@@ -283,8 +283,8 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-// Origin/Referer ヘッダーが必要なドメイン（NanbyoData / SPARQList 系）
-// TogoDX 等 Vite SPA は含めない（Origin ヘッダーが原因でエラーになるため）
+// Domains requiring Origin/Referer headers (NanbyoData / SPARQList etc.)
+// TogoDX and other Vite SPAs are excluded (as the Origin header can cause errors)
 const NEEDS_ORIGIN_DOMAINS = [
   'nanbyodata.jp',
   'sparql.dbcls.jp',
@@ -312,16 +312,16 @@ function stripMetaCsp(html) {
 }
 
 /**
- * HTML 内の静的リソース URL をプロキシ経由に書き換える。
- * <link href>, <script src>, <img src>, <form action> が対象。
- * <a href> はクライアント側の inject.js が担当する。
+ * Rewrites static resource URLs in HTML to go via the proxy.
+ * Targets <link href>, <script src>, <img src>, and <form action>.
+ * <a href> is handled by inject.js on the client side.
  */
 function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
   const base = new URL(targetUrl);
 
-  // フレームワークの非内容静的ファイルはプロキシ経由にしない。
-  // これにより document.currentScript.src が元 URLのままになり、
-  // Next.js の InvariantError (「/_next/ を含むはず」チェック等) が解消される。
+  // Do not proxy framework-specific non-content static files.
+  // This keeps document.currentScript.src as the original URL,
+  // resolving Next.js InvariantErrors (like checks for "/_next/").
   function isFrameworkStatic(absUrl) {
     try {
       const p = new URL(absUrl).pathname;
@@ -340,7 +340,7 @@ function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
     }
     try {
       const abs = new URL(h, base).href;
-      // フレームワーク静的ファイル（direct=true）は直接 URL
+      // Framework static files (direct=true) use the direct URL
       if (direct && isFrameworkStatic(abs)) return abs;
       return `${proxyOrigin}/proxy?url=${encodeURIComponent(abs)}`;
     } catch {
@@ -348,13 +348,13 @@ function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
     }
   }
 
-  // <link href="..."> — integrity/crossorigin も除去（プロキシ経由URL変更後のSRI失敗を防ぐ）
+  // <link href="..."> — Also remove integrity/crossorigin to prevent SRI failure after URL change
   html = html.replace(/(<link\b[^>]*?\bhref=)(["'])([^"']*)\2/gi,
     (_, pre, q, href) => `${pre}${q}${toProxyUrl(href, true)}${q}`);
   html = html.replace(/(<link\b[^>]*)\s+integrity=["'][^"']*["']/gi, '$1');
   html = html.replace(/(<link\b[^>]*)\s+crossorigin=["'][^"']*["']/gi, '$1');
 
-  // <script src="..."> — integrity/crossorigin も除去（SRI + CORS 失敗を防ぐ）
+  // <script src="..."> — Also remove integrity/crossorigin to prevent SRI + CORS failure
   html = html.replace(/(<script\b[^>]*?\bsrc=)(["'])([^"']*)\2/gi,
     (_, pre, q, src) => `${pre}${q}${toProxyUrl(src, true)}${q}`);
   html = html.replace(/(<script\b[^>]*)\s+integrity=["'][^"']*["']/gi, '$1');
@@ -364,7 +364,7 @@ function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
   html = html.replace(/(<img\b[^>]*?\bsrc=)(["'])([^"']*)\2/gi,
     (_, pre, q, src) => `${pre}${q}${toProxyUrl(src)}${q}`);
 
-  // <form action="..."> ← 重要: ログイン/承認フォームがアップストリーム直指しになるのを防ぐ
+  // <form action="..."> ← Important: prevents login/auth forms from pointing directly to upstream
   html = html.replace(/(<form\b[^>]*?\baction=)(["'])([^"']*)\2/gi,
     (_, pre, q, action) => `${pre}${q}${toProxyUrl(action)}${q}`);
 
@@ -372,17 +372,17 @@ function rewriteResourceUrls(html, targetUrl, proxyOrigin) {
 }
 
 function injectIntoHtml(html, targetUrl, proxyOrigin) {
-  // まずリソース URL をプロキシ経由に書き換える（<base> タグは使わない）
+  // First, rewrite resource URLs to go through the proxy (do not use <base> tag)
   html = rewriteResourceUrls(html, targetUrl, proxyOrigin);
 
-  // JSON.stringify でエスケープ（&amp; 等のHTML実体参照にならないため script タグ内で安全）
+  // Escaping with JSON.stringify is safe within script tags as it avoids HTML entities like &amp;
   const jsProxyOrigin = JSON.stringify(proxyOrigin);
   const jsTargetUrl   = JSON.stringify(targetUrl);
-  const safeOrigin    = escapeHtml(proxyOrigin); // href 属性用
+  const safeOrigin    = escapeHtml(proxyOrigin); // for href attribute
 
-  // fetch / XHR インターセプター:
-  // インラインスクリプトは変数設定のみに留め、ロジックは外部ファイル(interceptor.js)に分離。
-  // defer なしで <head> 先頭に挿入することでサイトの JS より先に実行される。
+  // Fetch / XHR interceptor:
+  // Inline script only sets variables; logic is separated into an external file (interceptor.js).
+  // Inserting at the start of <head> without "defer" ensures it runs before the site's own JS.
   const interceptorScript = [
     `<script>window.__GUIDE_PROXY_ORIGIN__=${jsProxyOrigin};window.__GUIDE_PROXY_TARGET_URL__=${jsTargetUrl};</script>`,
     `<script src="${safeOrigin}/static/interceptor.js"></script>`
@@ -439,9 +439,9 @@ function renderHomePage() {
 }
 
 /**
- * ES module の import/export specifier をプロキシ経由の絶対URLに書き換える。
- * クエリ方式のプロキシURL(?url=...)では相対import(./foo.js)が正しく解決されないため、
- * JavaScript レスポンスに対してこの変換を適用する。
+ * Rewrites ES module import/export specifiers to absolute URLs via the proxy.
+ * Since relative imports (./foo.js) aren't correctly resolved in query-based
+ * proxy URLs (?url=...), we apply this transformation to JavaScript responses.
  */
 function rewriteJsModuleImports(jsCode, moduleUrl, proxyOrigin) {
   function resolveSpec(spec) {
@@ -449,7 +449,7 @@ function rewriteJsModuleImports(jsCode, moduleUrl, proxyOrigin) {
     if (/^(data:|blob:)/i.test(spec)) return spec;
     let abs;
     try {
-      // 相対 (./ ../ /) と絶対 http(s) の両方を解決。bare specifier は例外→そのまま。
+      // Resolve both relative (./ ../ /) and absolute http(s). Bare specifiers remain unchanged as exceptions.
       abs = new URL(spec, moduleUrl).href;
     } catch {
       return spec;
@@ -459,19 +459,19 @@ function rewriteJsModuleImports(jsCode, moduleUrl, proxyOrigin) {
     return `${proxyOrigin}/proxy?url=${encodeURIComponent(abs)}`;
   }
 
-  // import ... from '...'  /  export ... from '...'
+  // import ... from '...' / export ... from '...'
   jsCode = jsCode.replace(
     /(\b(?:import|export)\b[^'"]*?\bfrom\s*)(["'])([^"']+)\2/g,
     (_, pre, q, spec) => `${pre}${q}${resolveSpec(spec)}${q}`
   );
 
-  // 副作用 import '...'（from を伴わない）
+  // Side-effect import '...' (without from)
   jsCode = jsCode.replace(
     /(\bimport\s*)(["'])([^"']+)\2/g,
     (m, pre, q, spec) => `${pre}${q}${resolveSpec(spec)}${q}`
   );
 
-  // 動的 import('...')
+  // Dynamic import('...')
   jsCode = jsCode.replace(
     /(\bimport\s*\(\s*)(["'])([^"']+)\2(\s*\))/g,
     (_, pre, q, spec, post) => `${pre}${q}${resolveSpec(spec)}${q}${post}`
@@ -481,8 +481,9 @@ function rewriteJsModuleImports(jsCode, moduleUrl, proxyOrigin) {
 }
 
 /**
- * CSS 内の url(...) と @import の参照をプロキシ経由の絶対URLに書き換える。
- * クエリ方式プロキシURLでは相対参照(../webfonts/x.ttf)が正しく解決されないため。
+ * Rewrites url(...) and @import references in CSS to absolute URLs via the proxy.
+ * Necessary because relative references (../webfonts/x.ttf) don't resolve correctly
+ * with query-based proxy URLs.
  */
 function rewriteCssUrls(cssCode, cssUrl, proxyOrigin) {
   function resolveRef(raw) {
@@ -692,7 +693,7 @@ let _cachedGuidePatterns = null;
 let _cachedPromptConfig = null;
 let _generatedGuides = new Map(); // 生成ガイドをメモリに保存
 
-// サイト別ガイドディレクトリマッピング（ホスト名 → ディレクトリ名）
+// Mapping of site-specific guide directories (hostname -> directory name)
 const SITE_GUIDE_MAP = {
   'togodx.dbcls.jp': 'togodx',
   'www.nite.go.jp':  'nbrc',
@@ -723,7 +724,7 @@ function loadSiteGuides(siteKey) {
   }
 }
 
-// targetUrl のホスト名からサイト別ガイドを返す。マッチしない場合は null を返す
+// Returns site-specific guides based on the targetUrl hostname. Returns null if no match.
 function getGuidesForTargetUrl(targetUrl) {
   if (!targetUrl) return null;
   try {
@@ -795,14 +796,14 @@ function loadPromptConfig() {
 }
 
 function loadHomePageHtml() {
-  // ホームページUIは毎回ファイルから読み直す（guide-selection-prompt.json を
-  // 編集したらサーバー再起動なしで即反映されるようにするため）。
+  // Re-read home page UI from file on every request (allows immediate updates to 
+  // guide-selection-prompt.json without server restart).
   try {
     const promptPath = path.resolve(__dirname, './guide-selection-prompt.json');
     const raw = fs.readFileSync(promptPath, 'utf-8').replace(/^\uFEFF/, '');
     const promptConfig = JSON.parse(raw);
     if (!promptConfig || !promptConfig.ui || !promptConfig.ui.html) {
-      console.error('guide-selection-prompt.json に ui.html が見つかりません');
+      console.error('ui.html not found in guide-selection-prompt.json');
       return '<h1>Error</h1><p>UI HTML not found in config</p>';
     }
     return promptConfig.ui.html;
@@ -828,7 +829,7 @@ async function callOllama(ollamaUri, modelName, prompt, apiKey) {
       'content-type': 'application/json; charset=utf-8',
       'content-length': Buffer.byteLength(body)
     };
-    // クラウド版（ollama.com）はAPIキー認証が必要
+    // Cloud version (ollama.com) requires API key authentication
     if (apiKey) {
       headers['authorization'] = `Bearer ${apiKey}`;
     }
@@ -875,7 +876,7 @@ async function callOllama(ollamaUri, modelName, prompt, apiKey) {
 async function callGemini(modelName, prompt, apiKey) {
   const key = apiKey || process.env.GEMINI_API_KEY;
   if (!key) {
-    throw new Error('Gemini API キーが必要です（apiKey パラメータ または GEMINI_API_KEY 環境変数）');
+    throw new Error('Gemini API key is required (apiKey parameter or GEMINI_API_KEY environment variable)');
   }
   const model = modelName || 'gemini-2.0-flash';
 
@@ -1007,7 +1008,7 @@ async function callClaude(modelName, prompt, apiKey) {
 }
 
 /**
- * provider に応じて LLM を呼び分けるディスパッチャ。
+ * Dispatcher for calling LLMs based on the provider.
  * provider: 'ollama' | 'openai' | 'claude' | 'gemini'
  */
 async function callLLM(provider, { ollamaUri, modelName, prompt, apiKey }) {
@@ -1016,13 +1017,13 @@ async function callLLM(provider, { ollamaUri, modelName, prompt, apiKey }) {
     case 'openai':  return callOpenAI(modelName, prompt, apiKey);
     case 'claude':  return callClaude(modelName, prompt, apiKey);
     case 'gemini':  return callGemini(modelName, prompt, apiKey);
-    default: throw new Error(`未対応のプロバイダーです: ${provider}（ollama / openai / claude / gemini）`);
+    default: throw new Error(`Unsupported provider: ${provider} (ollama / openai / claude / gemini)`);
   }
 }
 
-// ガイド選択用に、ガイドの内容を要約したテキストを作る。
-// トップレベルの description に加え、各ステップのタイトル・説明（HTMLタグ除去）を含める。
-// これにより LLM が「Nステップ」ではなく実際の内容で判断できる。
+// Generates a summary text of the guide content for guide selection.
+// Includes top-level description and step titles/descriptions (HTML tags removed).
+// This allows the LLM to make decisions based on actual content rather than just step count.
 function summarizeGuideForSelection(guide) {
   const parts = [];
   if (guide.description) {
@@ -1045,7 +1046,7 @@ function summarizeGuideForSelection(guide) {
 }
 
 // ────────────────────────────────────────────────────
-// 未知サイト向けブートストラップ
+// Bootstrap for unknown sites
 // ────────────────────────────────────────────────────
 
 function runCrawl(targetUrl, outputDir) {
@@ -1098,14 +1099,14 @@ async function handleBootstrapSite(req, res) {
 
   const proxyUrl = `/proxy?url=${encodeURIComponent(targetUrl)}`;
 
-  // 既知サイトはそのまま転送
+  // Redirect known sites directly
   if (SITE_GUIDE_MAP[hostname]) {
     sendText(res, 200, JSON.stringify({ ok: true, bootstrapped: false, proxyUrl }),
       'application/json; charset=utf-8');
     return;
   }
 
-  // guides/{hostname}/guide-patterns.json が既に存在する場合は登録して転送
+  // If guides/{hostname}/guide-patterns.json already exists, register and redirect
   const guidesDir = path.resolve(__dirname, '../guides');
   const siteDir   = path.join(guidesDir, hostname);
   const patternPath = path.join(siteDir, 'guide-patterns.json');
@@ -1117,27 +1118,27 @@ async function handleBootstrapSite(req, res) {
     return;
   }
 
-  // LLM 設定が必要
+  // LLM settings are required
   if (!modelName) {
-    sendText(res, 400, JSON.stringify({ error: 'modelName は未知サイトのガイド生成に必要です' }),
+    sendText(res, 400, JSON.stringify({ error: 'modelName is required for generating guides for unknown sites' }),
       'application/json; charset=utf-8');
     return;
   }
   if (provider === 'ollama' && !ollamaUri) {
-    sendText(res, 400, JSON.stringify({ error: 'ollama の場合 ollamaUri が必要です' }),
+    sendText(res, 400, JSON.stringify({ error: 'ollamaUri is required for Ollama' }),
       'application/json; charset=utf-8');
     return;
   }
 
   try {
-    // 1. 出力ディレクトリ作成
+    // 1. Create output directory
     fs.mkdirSync(siteDir, { recursive: true });
 
-    // 2. クロール実行
-    console.log(`[bootstrap] クロール開始: ${targetUrl} -> ${siteDir}`);
+    // 2. Execute crawl
+    console.log(`[bootstrap] Starting crawl: ${targetUrl} -> ${siteDir}`);
     await runCrawl(targetUrl, siteDir);
 
-    // 3. クロール結果読み込み（selector_info + markdown）
+    // 3. Load crawl results (selector_info + markdown)
     const crawlFiles = fs.readdirSync(siteDir);
     let crawlContext = '';
 
@@ -1152,13 +1153,13 @@ async function handleBootstrapSite(req, res) {
       crawlContext += `\n\n=== ${mdFile} (Markdown) ===\n${raw.slice(0, 3000)}`;
     }
 
-    // 4. GUIDE_AUTHORING.md 読み込み
+    // 4. Load GUIDE_AUTHORING.md
     const authoringPath = path.resolve(__dirname, '../GUIDE_AUTHORING.md');
     const authoringMd = fs.existsSync(authoringPath)
       ? fs.readFileSync(authoringPath, 'utf-8').slice(0, 6000)
       : '';
 
-    // 5. 既存ガイドの例を1件読み込む
+    // 5. Load one example of an existing guide
     let exampleGuides = '';
     if (fs.existsSync(guidesDir)) {
       const dirs = fs.readdirSync(guidesDir, { withFileTypes: true })
@@ -1172,31 +1173,59 @@ async function handleBootstrapSite(req, res) {
       }
     }
 
-    // 6. LLM プロンプト構築
+    // 6. Build LLM prompt
     const generatePrompt = [
-      '以下は guide-patterns.json の作成仕様書です：',
+      'Below is the creation specification for guide-patterns.json:',
       authoringMd,
       '',
-      '以下は既存の guide-patterns.json の例です（参考）：',
+      'Below are examples of existing guide-patterns.json files (for reference):',
       exampleGuides,
       '',
-      '以下は対象サイトのクロール結果です：',
-      `対象URL: ${targetUrl}`,
+      'Below are the crawl results for the target site:',
+      `Target URL: ${targetUrl}`,
       crawlContext,
       '',
-      ...(prompt ? [`ユーザーのリクエスト：「${prompt}」`, ''] : []),
-      '【指示】',
-      '上記の仕様書の形式と例に従い、このサイト向けの guide-patterns.json を生成してください。',
-      '- JSON 配列 [...] のみを返してください',
-      '- 各ガイドは guideId, version, locale, title, steps を持つこと',
-      '- steps は 3〜6 件程度、selector は上記クロール結果を参考に正確なCSSセレクタを使うこと',
-      ...(prompt ? ['- 特に「' + prompt + '」に関連するガイドを優先して含めること'] : []),
-      '- 他の説明文は不要です。JSON のみ返してください。',
+      ...(prompt ? [`User request: "${prompt}"`, ''] : []),
+      '【Instructions】',
+      'Follow the format and examples in the specification above to generate a guide-patterns.json file for this site.',
+      '- Return ONLY a JSON array [...]',
+      '- Each guide MUST have guideId, version, locale, title, and steps',
+      '- Include approximately 3-6 steps, using accurate CSS selectors based on the crawl results provided above',
+      ...(prompt ? ['- Prioritize including guides related to "' + prompt + '"'] : []),
+      '- No other explanatory text is required. Return ONLY the JSON.',
     ].join('\n');
 
-    // 7. LLM 呼び出し
-    console.log(`[bootstrap] LLMでガイド生成中... (provider=${provider}, model=${modelName})`);
+    // 7. Call LLM
+    console.log(`[bootstrap] Generating guide with LLM... (provider=${provider}, model=${modelName})`);
     const llmResponse = await callLLM(provider, { ollamaUri, modelName, prompt: generatePrompt, apiKey });
+
+    // 8. Extract JSON array
+    const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('LLM did not return a JSON array');
+    const guides = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(guides)) throw new Error('LLM response is not a JSON array');
+
+    // 9. Save to guides/{hostname}/guide-patterns.json
+    fs.writeFileSync(patternPath, JSON.stringify(guides, null, 2), 'utf-8');
+    console.log(`[bootstrap] Saved: ${patternPath} (${guides.length} guides)`);
+
+    // 10. Update cache
+    SITE_GUIDE_MAP[hostname] = hostname;
+    _siteGuideCache.delete(hostname);
+    _cachedGuidePatterns = null;
+
+    sendText(res, 200, JSON.stringify({
+      ok: true,
+      bootstrapped: true,
+      guideCount: guides.length,
+      proxyUrl
+    }), 'application/json; charset=utf-8');
+
+  } catch (err) {
+    console.error('[bootstrap] Error:', err.message);
+    sendText(res, 502, JSON.stringify({ error: err.message }), 'application/json; charset=utf-8');
+  }
+}
 
     // 8. JSON 配列を抽出
     const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
@@ -1247,15 +1276,15 @@ async function handleGenerateGuide(req, res) {
     return;
   }
   if (provider === 'ollama' && !ollamaUri) {
-    sendText(res, 400, JSON.stringify({ error: 'ollama の場合 ollamaUri が必要です' }), 'application/json; charset=utf-8');
+    sendText(res, 400, JSON.stringify({ error: 'ollamaUri is required for Ollama' }), 'application/json; charset=utf-8');
     return;
   }
 
   try {
-    // 対象サイトのガイドのみを使用する（他サイトのガイドを混入させない）
+    // Only use guides for the target site (avoid mixing in guides from other sites)
     const siteGuides = targetUrl ? getGuidesForTargetUrl(targetUrl) : null;
     if (!siteGuides || siteGuides.length === 0) {
-      // 対象サイトのガイドが存在しない場合はガイド選択をスキップ
+      // Skip guide selection if no guides exist for the target site
       sendText(res, 200, JSON.stringify({ ok: true, selectedGuideId: null }),
         'application/json; charset=utf-8');
       return;
@@ -1267,7 +1296,7 @@ async function handleGenerateGuide(req, res) {
       description: summarizeGuideForSelection(g)
     }));
 
-    // LLM プロンプト - Phase 1: 既存ガイド選択
+    // LLM Prompt - Phase 1: Existing Guide Selection
     const promptConfig = loadPromptConfig();
     if (!promptConfig || !promptConfig.phase1 || !promptConfig.phase1.template) {
       throw new Error('Prompt config not loaded or phase1 template not found');
@@ -1277,14 +1306,14 @@ async function handleGenerateGuide(req, res) {
       .split('{GUIDES_LIST}').join(JSON.stringify(guidesList, null, 2))
       .split('{USER_PROMPT}').join(prompt);
 
-    // デバッグ: ユーザープロンプトと候補ガイドを確認
+    // Debug: Check user prompt and candidate guides
     console.log('=== handleGenerateGuide ===');
     console.log('User prompt:', prompt);
     console.log('Guides for selection:', guidesList.map(g => `${g.guideId}: ${g.title}`).join(', '));
 
     const ollamaResponse = await callLLM(provider, { ollamaUri, modelName, prompt: phase1Prompt, apiKey });
 
-    // JSON を抽出
+    // Extract JSON
     const jsonMatch = ollamaResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('Valid JSON not found in Ollama response');
@@ -1292,16 +1321,16 @@ async function handleGenerateGuide(req, res) {
 
     const selectionResult = JSON.parse(jsonMatch[0]);
     
-    // デバッグ出力
+    // Debug output
     console.log('LLM Response:', JSON.stringify(selectionResult, null, 2));
 
-    // 既存ガイドが選択された場合
+    // If an existing guide is selected
     if (selectionResult.selectedGuideId) {
       const selectedGuideId = selectionResult.selectedGuideId;
       const selectedGuide = allGuides.find(g => g.guideId === selectedGuideId);
       
       if (selectedGuide) {
-        // 既存ガイドが見つかった
+        // Existing guide found
         sendText(res, 200, JSON.stringify({
           ok: true,
           selectedGuideId: selectedGuideId,
@@ -1314,19 +1343,19 @@ async function handleGenerateGuide(req, res) {
       }
     }
 
-    // LLM が新ガイドが必要と判断した場合: 既存クロール結果を使って新ガイドを生成・保存
+    // If the LLM determines a new guide is needed: Generate and save a new guide using existing crawl results
     if (selectionResult.needsNewGuide && targetUrl) {
-      console.log('[generate-guide] 新パターン検出 → 新ガイドを生成します:', selectionResult.reasoning);
+      console.log('[generate-guide] New pattern detected -> Generating new guide:', selectionResult.reasoning);
       try {
         const newGuideHostname = (() => { try { return new URL(targetUrl).hostname; } catch { return ''; } })();
         const newGuideSiteKey = SITE_GUIDE_MAP[newGuideHostname];
-        if (!newGuideSiteKey) throw new Error(`SITE_GUIDE_MAP に登録されていないサイトです: ${newGuideHostname}`);
+        if (!newGuideSiteKey) throw new Error(`Site not registered in SITE_GUIDE_MAP: ${newGuideHostname}`);
 
         const guidesBaseDir = path.resolve(__dirname, '../guides');
         const newGuideSiteDir = path.join(guidesBaseDir, newGuideSiteKey);
         const newGuidePatternPath = path.join(newGuideSiteDir, 'guide-patterns.json');
 
-        // クロール結果を読み込む（既存の selector_info.json / .md）
+        // Load crawl results (existing selector_info.json / .md)
         let newGuideCrawlContext = '';
         if (fs.existsSync(newGuideSiteDir)) {
           const siteFiles = fs.readdirSync(newGuideSiteDir);
@@ -1347,52 +1376,52 @@ async function handleGenerateGuide(req, res) {
           ? fs.readFileSync(authoringPath, 'utf-8').slice(0, 6000)
           : '';
 
-        // 既存ガイドを例として提供（重複 guideId 防止のため ID 一覧も含める）
+        // Provide existing guides as examples (include ID list to prevent duplicate guideIds)
         const existingGuideIds = allGuides.map(g => g.guideId).join(', ');
         const existingGuidesJson = JSON.stringify(allGuides.slice(0, 2), null, 2).slice(0, 4000);
 
         const newGuidePrompt = [
-          '以下は guide-patterns.json の作成仕様書です：',
+          'Below is the creation specification for guide-patterns.json:',
           authoringMd,
           '',
-          '以下は同サイトの既存ガイド例です（参考）：',
+          'Below are examples of existing guides for the same site (for reference):',
           existingGuidesJson,
           '',
-          `既存ガイドのID一覧（重複禁止）: ${existingGuideIds}`,
+          `List of existing guide IDs (DO NOT DUPLICATE): ${existingGuideIds}`,
           '',
-          '以下は対象サイトのクロール結果です：',
-          `対象URL: ${targetUrl}`,
+          'Below are the crawl results for the target site:',
+          `Target URL: ${targetUrl}`,
           newGuideCrawlContext,
           '',
-          `ユーザーのリクエスト：「${prompt}」`,
+          `User request: "${prompt}"`,
           '',
-          '【指示】',
-          '上記の仕様書と既存ガイドに倣い、このユーザーリクエストに対応する新しいガイドを1件だけ生成してください。',
-          '- JSON オブジェクト {...} のみを返してください（配列ではなく単一オブジェクト）',
-          '- guideId は既存ID一覧と重複しないユニークな文字列にすること',
-          '- guideId, version, locale, title, steps を必ず含めること',
-          '- steps は 3〜6 件程度、selector は上記クロール結果を参考に正確なCSSセレクタを使うこと',
-          '- 他の説明文は不要です。JSON のみ返してください。'
+          '【Instructions】',
+          'Following the specification and existing guides above, generate exactly one new guide that addresses this user request.',
+          '- Return ONLY a JSON object {...} (not an array, just a single object)',
+          '- Make guideId a unique string that does not overlap with the existing ID list',
+          '- MUST include guideId, version, locale, title, and steps',
+          '- Include approximately 3-6 steps, using accurate CSS selectors based on the crawl results provided above',
+          '- No other explanatory text is required. Return ONLY the JSON.'
         ].join('\n');
 
-        console.log(`[generate-guide] LLMで新ガイド生成中... (provider=${provider}, model=${modelName})`);
+        console.log(`[generate-guide] Generating new guide with LLM... (provider=${provider}, model=${modelName})`);
         const newGuideResponse = await callLLM(provider, { ollamaUri, modelName, prompt: newGuidePrompt, apiKey });
 
         const newJsonMatch = newGuideResponse.match(/\{[\s\S]*\}/);
-        if (!newJsonMatch) throw new Error('LLMが新ガイドのJSONを返しませんでした');
+        if (!newJsonMatch) throw new Error('LLM did not return a JSON object for the new guide');
         const newGuide = JSON.parse(newJsonMatch[0]);
-        if (!newGuide.guideId || !Array.isArray(newGuide.steps)) throw new Error('生成されたガイドの形式が不正です');
+        if (!newGuide.guideId || !Array.isArray(newGuide.steps)) throw new Error('Invalid format for the generated guide');
 
-        // 既存の guide-patterns.json に追記して保存
+        // Append to existing guide-patterns.json and save
         const existingRaw = fs.existsSync(newGuidePatternPath)
           ? fs.readFileSync(newGuidePatternPath, 'utf-8').replace(/^\uFEFF/, '')
           : '[]';
         const existingArray = JSON.parse(existingRaw);
         existingArray.push(newGuide);
         fs.writeFileSync(newGuidePatternPath, JSON.stringify(existingArray, null, 2), 'utf-8');
-        console.log(`[generate-guide] 新ガイド追加保存: ${newGuide.guideId} -> ${newGuidePatternPath}`);
+        console.log(`[generate-guide] Appended and saved new guide: ${newGuide.guideId} -> ${newGuidePatternPath}`);
 
-        // キャッシュ更新
+        // Update cache
         _siteGuideCache.delete(newGuideSiteKey);
         _cachedGuidePatterns = null;
 
@@ -1423,7 +1452,7 @@ async function handleGenerateGuide(req, res) {
         selectedGuideId: FALLBACK_GUIDE_ID,
         guideTitle: fallbackGuide.title || FALLBACK_GUIDE_ID,
         keywords: selectionResult.keywords || [],
-        reasoning: selectionResult.reasoning || 'AIが適切なガイドを判断できなかったため、基本操作の概要を表示します。',
+        reasoning: selectionResult.reasoning || 'AI could not determine an appropriate guide, so a basic overview of operations is displayed.',
         fallback: true,
         guideJson: fallbackGuide
       }), 'application/json; charset=utf-8');

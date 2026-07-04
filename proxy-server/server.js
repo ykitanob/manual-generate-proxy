@@ -690,7 +690,6 @@ async function handleConsent(req, res) {
 
 let _cachedGuidePatterns = null;
 let _cachedPromptConfig = null;
-let _cachedHomePageHtml = null;
 let _generatedGuides = new Map(); // 生成ガイドをメモリに保存
 
 // サイト別ガイドディレクトリマッピング（ホスト名 → ディレクトリ名）
@@ -796,21 +795,21 @@ function loadPromptConfig() {
 }
 
 function loadHomePageHtml() {
-  if (_cachedHomePageHtml) return _cachedHomePageHtml;
-
+  // ホームページUIは毎回ファイルから読み直す（guide-selection-prompt.json を
+  // 編集したらサーバー再起動なしで即反映されるようにするため）。
   try {
-    const promptConfig = loadPromptConfig();
+    const promptPath = path.resolve(__dirname, './guide-selection-prompt.json');
+    const raw = fs.readFileSync(promptPath, 'utf-8').replace(/^\uFEFF/, '');
+    const promptConfig = JSON.parse(raw);
     if (!promptConfig || !promptConfig.ui || !promptConfig.ui.html) {
       console.error('guide-selection-prompt.json に ui.html が見つかりません');
       return '<h1>Error</h1><p>UI HTML not found in config</p>';
     }
-    _cachedHomePageHtml = promptConfig.ui.html;
+    return promptConfig.ui.html;
   } catch (err) {
     console.error(`Failed to load home page HTML: ${err.message}`);
-    _cachedHomePageHtml = '<h1>Error</h1><p>Failed to load UI HTML from config</p>';
+    return '<h1>Error</h1><p>Failed to load UI HTML from config</p>';
   }
-
-  return _cachedHomePageHtml;
 }
 
 async function callOllama(ollamaUri, modelName, prompt, apiKey) {
@@ -1312,6 +1311,104 @@ async function handleGenerateGuide(req, res) {
           guideJson: selectedGuide
         }), 'application/json; charset=utf-8');
         return;
+      }
+    }
+
+    // LLM が新ガイドが必要と判断した場合: 既存クロール結果を使って新ガイドを生成・保存
+    if (selectionResult.needsNewGuide && targetUrl) {
+      console.log('[generate-guide] 新パターン検出 → 新ガイドを生成します:', selectionResult.reasoning);
+      try {
+        const newGuideHostname = (() => { try { return new URL(targetUrl).hostname; } catch { return ''; } })();
+        const newGuideSiteKey = SITE_GUIDE_MAP[newGuideHostname];
+        if (!newGuideSiteKey) throw new Error(`SITE_GUIDE_MAP に登録されていないサイトです: ${newGuideHostname}`);
+
+        const guidesBaseDir = path.resolve(__dirname, '../guides');
+        const newGuideSiteDir = path.join(guidesBaseDir, newGuideSiteKey);
+        const newGuidePatternPath = path.join(newGuideSiteDir, 'guide-patterns.json');
+
+        // クロール結果を読み込む（既存の selector_info.json / .md）
+        let newGuideCrawlContext = '';
+        if (fs.existsSync(newGuideSiteDir)) {
+          const siteFiles = fs.readdirSync(newGuideSiteDir);
+          const siFile = siteFiles.find(f => f.endsWith('_selector_info.json') && !f.startsWith('menu_'));
+          if (siFile) {
+            const raw = fs.readFileSync(path.join(newGuideSiteDir, siFile), 'utf-8');
+            newGuideCrawlContext += `\n\n=== ${siFile} ===\n${raw.slice(0, 8000)}`;
+          }
+          const mdFile = siteFiles.find(f => f.endsWith('.md') && !f.startsWith('menu_'));
+          if (mdFile) {
+            const raw = fs.readFileSync(path.join(newGuideSiteDir, mdFile), 'utf-8');
+            newGuideCrawlContext += `\n\n=== ${mdFile} (Markdown) ===\n${raw.slice(0, 3000)}`;
+          }
+        }
+
+        const authoringPath = path.resolve(__dirname, '../GUIDE_AUTHORING.md');
+        const authoringMd = fs.existsSync(authoringPath)
+          ? fs.readFileSync(authoringPath, 'utf-8').slice(0, 6000)
+          : '';
+
+        // 既存ガイドを例として提供（重複 guideId 防止のため ID 一覧も含める）
+        const existingGuideIds = allGuides.map(g => g.guideId).join(', ');
+        const existingGuidesJson = JSON.stringify(allGuides.slice(0, 2), null, 2).slice(0, 4000);
+
+        const newGuidePrompt = [
+          '以下は guide-patterns.json の作成仕様書です：',
+          authoringMd,
+          '',
+          '以下は同サイトの既存ガイド例です（参考）：',
+          existingGuidesJson,
+          '',
+          `既存ガイドのID一覧（重複禁止）: ${existingGuideIds}`,
+          '',
+          '以下は対象サイトのクロール結果です：',
+          `対象URL: ${targetUrl}`,
+          newGuideCrawlContext,
+          '',
+          `ユーザーのリクエスト：「${prompt}」`,
+          '',
+          '【指示】',
+          '上記の仕様書と既存ガイドに倣い、このユーザーリクエストに対応する新しいガイドを1件だけ生成してください。',
+          '- JSON オブジェクト {...} のみを返してください（配列ではなく単一オブジェクト）',
+          '- guideId は既存ID一覧と重複しないユニークな文字列にすること',
+          '- guideId, version, locale, title, steps を必ず含めること',
+          '- steps は 3〜6 件程度、selector は上記クロール結果を参考に正確なCSSセレクタを使うこと',
+          '- 他の説明文は不要です。JSON のみ返してください。'
+        ].join('\n');
+
+        console.log(`[generate-guide] LLMで新ガイド生成中... (provider=${provider}, model=${modelName})`);
+        const newGuideResponse = await callLLM(provider, { ollamaUri, modelName, prompt: newGuidePrompt, apiKey });
+
+        const newJsonMatch = newGuideResponse.match(/\{[\s\S]*\}/);
+        if (!newJsonMatch) throw new Error('LLMが新ガイドのJSONを返しませんでした');
+        const newGuide = JSON.parse(newJsonMatch[0]);
+        if (!newGuide.guideId || !Array.isArray(newGuide.steps)) throw new Error('生成されたガイドの形式が不正です');
+
+        // 既存の guide-patterns.json に追記して保存
+        const existingRaw = fs.existsSync(newGuidePatternPath)
+          ? fs.readFileSync(newGuidePatternPath, 'utf-8').replace(/^\uFEFF/, '')
+          : '[]';
+        const existingArray = JSON.parse(existingRaw);
+        existingArray.push(newGuide);
+        fs.writeFileSync(newGuidePatternPath, JSON.stringify(existingArray, null, 2), 'utf-8');
+        console.log(`[generate-guide] 新ガイド追加保存: ${newGuide.guideId} -> ${newGuidePatternPath}`);
+
+        // キャッシュ更新
+        _siteGuideCache.delete(newGuideSiteKey);
+        _cachedGuidePatterns = null;
+
+        sendText(res, 200, JSON.stringify({
+          ok: true,
+          selectedGuideId: newGuide.guideId,
+          guideTitle: newGuide.title || newGuide.guideId,
+          keywords: selectionResult.keywords || [],
+          reasoning: selectionResult.reasoning || '',
+          newGuideCreated: true,
+          guideJson: newGuide
+        }), 'application/json; charset=utf-8');
+        return;
+      } catch (newGuideErr) {
+        console.error('[generate-guide] 新ガイド生成エラー:', newGuideErr.message);
+        // エラーの場合はフォールバックへ続行
       }
     }
 

@@ -19,8 +19,8 @@ NEW_HTML = """\
     .section { background: white; padding: 24px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .section h2 { margin-top: 0; color: #005faf; }
     label { font-size: 13px; color: #555; font-weight: bold; }
-    input, textarea { width: 100%; max-width: 800px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; margin-top: 4px; }
-    input:focus, textarea:focus { outline: none; border-color: #005faf; box-shadow: 0 0 4px rgba(0, 95, 175, 0.3); }
+    input, textarea, select { width: 100%; max-width: 800px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; margin-top: 4px; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #005faf; box-shadow: 0 0 4px rgba(0, 95, 175, 0.3); }
     .field { margin-bottom: 14px; }
     .row { display: flex; gap: 12px; max-width: 800px; }
     .row .field { flex: 1; }
@@ -58,20 +58,27 @@ NEW_HTML = """\
     </div>
 
     <details open>
-      <summary>⚙ LLM 設定（Ollama）</summary>
+      <summary>⚙ LLM 設定</summary>
       <div class="llm-fields">
-        <div class="row">
-          <div class="field">
-            <label for="ollama-uri">Ollama エンドポイント</label>
-            <input type="text" id="ollama-uri" placeholder="http://localhost:11434" value="http://172.27.184.54:11434">
-          </div>
-          <div class="field">
-            <label for="ollama-model">Ollama モデル</label>
-            <input type="text" id="ollama-model" placeholder="zephyr:7b" value="zephyr:7b">
-          </div>
+        <div class="field">
+          <label for="llm-provider">プロバイダー</label>
+          <select id="llm-provider">
+            <option value="ollama">Ollama（ローカル）</option>
+            <option value="openai">OpenAI</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="gemini">Gemini (Google)</option>
+          </select>
+        </div>
+        <div id="field-ollama-uri" class="field">
+          <label for="ollama-uri">Ollama エンドポイント</label>
+          <input type="text" id="ollama-uri" placeholder="http://localhost:11434" value="http://172.27.184.54:11434">
         </div>
         <div class="field">
-          <label for="ollama-apikey">API キー（クラウド版 https://ollama.com を使う場合のみ）</label>
+          <label for="ollama-model">モデル名</label>
+          <input type="text" id="ollama-model" placeholder="zephyr:7b" value="zephyr:7b">
+        </div>
+        <div class="field">
+          <label for="ollama-apikey" id="label-apikey">API キー（クラウド版 https://ollama.com を使う場合のみ）</label>
           <input type="password" id="ollama-apikey" placeholder="ローカル版は空欄のまま" value="">
         </div>
       </div>
@@ -82,9 +89,37 @@ NEW_HTML = """\
   </div>
 
   <script>
+    const MODEL_PLACEHOLDERS = {
+      ollama: 'zephyr:7b',
+      openai: 'gpt-4o-mini',
+      claude: 'claude-3-5-haiku-20241022',
+      gemini: 'gemini-2.0-flash'
+    };
+
+    function updateProviderFields() {
+      const provider = document.getElementById('llm-provider').value;
+      const ollamaUriField = document.getElementById('field-ollama-uri');
+      const apikeyLabel   = document.getElementById('label-apikey');
+      const apikeyInput   = document.getElementById('ollama-apikey');
+      const modelInput    = document.getElementById('ollama-model');
+
+      modelInput.placeholder = MODEL_PLACEHOLDERS[provider] || '';
+
+      if (provider === 'ollama') {
+        ollamaUriField.style.display = '';
+        apikeyLabel.textContent = 'API キー（クラウド版 https://ollama.com を使う場合のみ）';
+        apikeyInput.placeholder = 'ローカル版は空欄のまま';
+      } else {
+        ollamaUriField.style.display = 'none';
+        apikeyLabel.textContent = 'API キー（必須）';
+        apikeyInput.placeholder = provider + ' API キーを入力';
+      }
+    }
+
     async function openWithGuide() {
       const url      = document.getElementById('proxy-url').value.trim();
       const prompt   = document.getElementById('guide-prompt').value.trim();
+      const provider = document.getElementById('llm-provider').value;
       const ollamaUri = document.getElementById('ollama-uri').value.trim();
       const modelName = document.getElementById('ollama-model').value.trim();
       const apiKey   = document.getElementById('ollama-apikey').value;
@@ -108,7 +143,7 @@ NEW_HTML = """\
         const bsResp = await fetch('/api/bootstrap-site', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ targetUrl: url, ollamaUri, modelName, apiKey, prompt })
+          body: JSON.stringify({ targetUrl: url, provider, ollamaUri, modelName, apiKey, prompt })
         });
         const bsData = await bsResp.json();
         if (!bsResp.ok || !bsData.ok) {
@@ -123,26 +158,37 @@ NEW_HTML = """\
           : '';
 
         // Step 2: プロンプトがある場合はガイド選択
-        if (prompt && ollamaUri && modelName) {
-          setLoading('ガイドを選択中...');
+        if (prompt && modelName) {
+          setLoading('AIがガイドを選択中...');
           try {
             const genResp = await fetch('/api/generate-guide', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ ollamaUri, modelName, apiKey, prompt })
+              body: JSON.stringify({ provider, ollamaUri, modelName, apiKey, prompt, targetUrl: url })
             });
             if (genResp.ok) {
               const genData = await genResp.json();
               if (genData.selectedGuideId) {
                 proxyUrl += '&guideId=' + encodeURIComponent(genData.selectedGuideId);
-                statusMsg += `「${genData.guideTitle}」を選択しました。`;
+                if (genData.newGuideCreated) {
+                  statusMsg += `新しいガイド「${genData.guideTitle}」を生成しました。`;
+                } else {
+                  statusMsg += `「${genData.guideTitle}」を選択しました。`;
+                }
+                if (genData.keywords && genData.keywords.length) {
+                  statusMsg += `\n🔑 キーワード: ${genData.keywords.join(', ')}`;
+                }
+                if (genData.reasoning) {
+                  statusMsg += `\n💭 ${genData.reasoning}`;
+                }
               }
             }
           } catch (_) { /* ガイド選択失敗は無視してページを開く */ }
         }
 
         statusDiv.className = 'status success';
-        statusDiv.textContent = (statusMsg || '') + 'ページへ移動します...';
+        statusDiv.style.whiteSpace = 'pre-line';
+        statusDiv.textContent = (statusMsg || '') + '\\nページへ移動します...';
         setTimeout(() => { window.location.href = proxyUrl; }, 800);
 
       } catch (err) {
@@ -155,6 +201,11 @@ NEW_HTML = """\
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) openWithGuide();
     });
+
+    // プロバイダー切替イベント（インライン onchange よりイベントリスナの方が確実）
+    document.getElementById('llm-provider').addEventListener('change', updateProviderFields);
+    // 初期表示（スクリプトは body 末尾のため DOM は既に構築済み）
+    updateProviderFields();
   </script>
 </body>
 </html>"""

@@ -8,11 +8,11 @@
     var s = String(url);
     if (/^(data:|blob:|javascript:|#)/i.test(s)) return s;
     try {
-      // 絶対 http(s) はそのまま、相対/ルート相対(/ontology/... 等)は
-      // ターゲットサイトを基準に解決してプロキシ経由にする。
+      // Keep absolute http(s) as is. For relative/root-relative (/ontology/...) paths,
+      // resolve them based on the target site and route through the proxy.
       var abs = /^https?:\/\//i.test(s) ? s : new URL(s, TU).href;
       if (!/^https?:/i.test(abs)) return s;
-      // すでにプロキシ自身のURL(API/static 等)はそのまま
+      // If it's already a URL of the proxy itself (API/static etc.), keep it.
       if (abs.indexOf(PO) === 0) return url;
       return PO + '/proxy?url=' + encodeURIComponent(abs);
     } catch (e) {

@@ -105,26 +105,26 @@ function verifySignature(guidePackage, signingSecret) {
   //   );
   // --------------------------------------------------------
 
-  // スタブ: 常に false を返す（未実装を明示）
+  // Stub: Always returns false (indicates unimplemented)
   void signingSecret;
   return false;
 }
 
-// ---------- セルフテスト（npm run validate:schema で実行） ----------
+// ---------- Self-test (executed with npm run validate:schema) ----------
 
 function selfTest() {
   const goodPackage = {
     id:      'guide-test-001',
     version: '1.0.0',
-    title:   'テストガイド',
+    title:   'Test Guide',
     targetDomain: 'example.com',
     steps: [
       {
         id:            'step-1',
         selector:      '#main-button',
         action:        'highlight',
-        title:         '最初のステップ',
-        description:   'このボタンをクリックしてください。',
+        title:         'First Step',
+        description:   'Please click this button.',
         placement:     'bottom',
         nextCondition: 'onClick',
         timeoutMs:     30000,
@@ -153,7 +153,7 @@ function selfTest() {
   }
   console.log('[selfTest] PASS: goodPackage is valid');
 
-  // 危険セレクタの拒否を確認
+  // Verify rejection of dangerous selectors
   const badPackage = JSON.parse(JSON.stringify(goodPackage));
   badPackage.steps[0].selector = 'script';
   const badResult = validateGuidePackage(badPackage);

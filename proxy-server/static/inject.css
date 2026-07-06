@@ -1,20 +1,20 @@
-/* Driver.js のデフォルトで .driver-active-element（ハイライト要素）は
-   pointer-events: auto になる。ページの他の要素は none のままにして
-   ローディングオーバーレイなどが誤ってクリックをインターセプトしないようにする。 */
+/* By default in Driver.js, .driver-active-element (the highlighted element) has 
+   pointer-events: auto. Keep other elements on the page as none to prevent 
+   loading overlays from accidentally intercepting clicks. */
 
-/* ガイドメニュー（固定UI）はドライバーアクティブ中も操作可能にする */
+/* Ensure the guide menu (static UI) remains interactable while the driver is active */
 .driver-active #guide-proxy-menu,
 .driver-active #guide-proxy-menu * {
   pointer-events: auto !important;
 }
 
-/* オーバーレイは確実にクリックを通過させる */
+/* Ensure the overlay passes clicks through */
 .driver-overlay,
 .driver-overlay * {
   pointer-events: none !important;
 }
 
-/* ポップオーバーボタンを確実に有効化 */
+/* Ensure popover buttons are enabled */
 .driver-popover,
 .driver-popover * {
   pointer-events: auto !important;

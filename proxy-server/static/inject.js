@@ -242,7 +242,7 @@
     const agreeBtn = document.getElementById('btOk')
       || Array.from(document.querySelectorAll('a')).find((a) => {
         const txt = (a.textContent || '').trim();
-        return txt === '同意する' || txt === 'Agree';
+        return txt === 'Agree';
       });
     if (!agreeBtn) return;
 
@@ -294,7 +294,7 @@
     const anchors = Array.from(document.querySelectorAll('a[href], a'));
     return anchors.find((a) => {
       const txt = (a.textContent || '').trim();
-      return txt === '細菌' || txt === 'Bacteria';
+      return txt === 'Bacteria';
     }) || document.body;
   }
 
@@ -342,7 +342,7 @@
       return false;
     }
 
-    // TogoDX の折りたたみ領域（詳細テーブル）を誤って拾わない
+    // TogoDX specific: Do not pick up collapsed regions (detail tables) incorrectly
     if (el.closest('.row.-lower.collapsingcontent')) {
       return false;
     }
@@ -362,16 +362,16 @@
     const variants = expandKeywordVariants(keyword);
     const normalizedVariants = variants.map(normalizeMatchText).filter(Boolean);
 
-    // TogoDX 実DOM: scope が null の場合は TogoDX の属性パネルコンテナを使う
+    // TogoDX Real DOM: If scope is null, use the TogoDX attribute panel container
     const root = scope
       || document.querySelector('#Properties')
       || document.querySelector('section.concepts')
       || document.body;
 
-    // カテゴリヒントによる絞り込み（'Protein' → data-category-id="protein" のパネルのみ検索）
+    // Filtering by category hint (e.g., 'Protein' → search only panels with data-category-id="protein")
     const catId = categoryHint ? categoryHint.toLowerCase() : null;
 
-    // 1. TogoDX 固有: li.track-filter-view[data-node] の span.label テキストで一致
+    // 1. TogoDX Specific: Match by text in span.label of li.track-filter-view[data-node]
     const filterItems = Array.from(root.querySelectorAll('li.track-filter-view[data-node]'));
     const byLabel = filterItems.find((li) => {
       if (!isVisibleCandidate(li)) return false;
@@ -382,8 +382,8 @@
     });
     if (byLabel) return byLabel;
 
-    // 2. TogoDX 固有: 属性パネル(attribute-track-view)の h2.title で一致
-    //    カテゴリヒントがある場合は data-category-id でスコープを絞る
+    // 2. TogoDX Specific: Match by text in h2.title of the attribute panel (attribute-track-view)
+    //    If there is a category hint, narrow the scope using data-category-id
     const panelSelector = catId
       ? `.attribute-track-view[data-category-id="${catId}"]`
       : '.attribute-track-view';
@@ -396,7 +396,7 @@
     });
     if (byPanel) return byPanel;
 
-    // カテゴリスコープで見つからない場合は全パネルにフォールバック
+    // Fall back to all panels if not found in the category scope
     if (catId) {
       const allPanels = Array.from(root.querySelectorAll('.attribute-track-view'));
       const byAnyPanel = allPanels.find((el) => {
@@ -408,7 +408,7 @@
       if (byAnyPanel) return byAnyPanel;
     }
 
-    // 3. data-node 属性値で一致（pathogenic など snake_case の値）
+    // 3. data-node attribute match (snake_case value)
     const dataNodeCandidates = Array.from(root.querySelectorAll('[data-node]')).filter(isVisibleCandidate);
     const byDataNode = dataNodeCandidates.find((el) => {
       const raw = (el.getAttribute('data-node') || '').trim();
@@ -427,7 +427,7 @@
     });
     if (byAttr) return byAttr;
 
-    // 5. テキスト一致（フォールバック）
+    // 5. Text match (fallback)
     const strongCandidates = Array.from(root.querySelectorAll('.label, .title, label, span, td, li, h2, h3')).filter(isVisibleCandidate);
     return strongCandidates.find((el) => {
       const txt = (el.textContent || '').trim().toLowerCase();
@@ -435,19 +435,19 @@
     }) || null;
   }
 
-  // TogoDX のカテゴリ名 → data-category-id のマッピング
-  // （例: 'Gene' → 'gene', 'Protein' → 'protein'）
+  // Mapping of TogoDX category names to data-category-id
+  // (e.g., 'Gene' -> 'gene', 'Protein' -> 'protein')
   function findCategorySection(categoryName) {
     const catId = (categoryName || '').trim().toLowerCase();
     if (!catId) return null;
-    // h3[data-category-id="..."] はTogoDXのカテゴリヘッダー
+    // h3[data-category-id="..."] is the TogoDX category header
     const header = document.querySelector(`h3[data-category-id="${catId}"]`);
     if (header) {
-      // カテゴリをまとめる祖先要素（class に "category" を含む要素）があればそちらを返す
+      // If there is an ancestor element summarizing the category (element containing "category" in class), return it
       const wrapper = header.closest('[class*="category"]:not(body)');
       return wrapper || header;
     }
-    // フォールバック: data-category-id を持つ最初の要素
+    // Fallback: the first element with the data-category-id
     return document.querySelector(`[data-category-id="${catId}"]`) || null;
   }
 
@@ -455,29 +455,29 @@
     const selector = step?.selector || '';
     const pathKeywords = extractTreePath(step);
 
-    // description に『A → B → C』形式のパスがある場合:
-    // 優先順位: li.track-filter-view span.label → .attribute-track-view h2.title
-    //           → data-node 属性 → title/aria-label → テキスト全体
-    // （findBestTreeNode がこの5段階優先順位を実装している）
-    // カテゴリセクション全体（h3[data-category-id]）は最終フォールバックとする
+    // If there is a path format like "A -> B -> C" in the description:
+    // Priority: li.track-filter-view span.label -> .attribute-track-view h2.title
+    //           -> data-node attribute -> title/aria-label -> full text
+    // (findBestTreeNode implements this 5-stage priority)
+    // The entire category section (h3[data-category-id]) is used as the final fallback
     if (pathKeywords.length >= 1) {
       let root = null;
       if (selector && selector !== 'body') {
         try { root = document.querySelector(selector) || null; } catch { root = null; }
       }
-      // 末尾キーワード（最も具体的）から順に検索
+      // Search in order from the last keyword (most specific)
       for (let i = pathKeywords.length - 1; i >= 0; i -= 1) {
         const catHint = i > 0 ? pathKeywords[0] : null;
         const node = findBestTreeNode(root, pathKeywords[i], catHint);
         if (node) return node;
       }
-      // 最終フォールバック: カテゴリセクション全体
+      // Final fallback: Entire category section
       const section = findCategorySection(pathKeywords[0]);
       if (section) return section;
       return root || document.body;
     }
 
-    // パスなし → selector で解決
+    // No path -> resolve via selector
     if (!selector) return document.body;
     try {
       return document.querySelector(selector) || document.body;
@@ -733,7 +733,7 @@
       || Array.from(document.querySelectorAll('a, button, input[type="submit"]'))
         .find((el) => {
           const txt = (el.textContent || el.value || '').trim();
-          return txt === '同意する' || txt === 'Agree';
+          return txt === 'Agree';
         });
     if (consentBtn) {
       driverSteps.unshift({

@@ -185,7 +185,7 @@ function requestUpstream(targetUrl, options = {}) {
       if (cookieHeader) reqHeaders.cookie = cookieHeader;
     }
 
-    // Content-Length を自動設定
+    // Set Content-Length automatically
     if (body && !reqHeaders['content-length']) {
       const bodyBuffer = typeof body === 'string' ? Buffer.from(body, 'utf-8') : body;
       reqHeaders['content-length'] = bodyBuffer.length;
@@ -243,7 +243,7 @@ async function requestUpstreamFollowing(targetUrl, options = {}) {
     if (!next) return response;
 
     url = next;
-    // GET のみ追従する
+    // Follow redirect with GET only
     options.method = 'GET';
     options.body = null;
   }
@@ -388,7 +388,7 @@ function injectIntoHtml(html, targetUrl, proxyOrigin) {
     `<script src="${safeOrigin}/static/interceptor.js"></script>`
   ].join('\n');
 
-  // driver.js / driver.css: node_modules があればローカル提供、なければ CDN
+  // driver.js / driver.css: use local from node_modules if available, otherwise use CDN
   const NM_DRIVER_DIR = path.join(__dirname, 'node_modules', 'driver.js', 'dist');
   const hasLocalDriver = fs.existsSync(path.join(NM_DRIVER_DIR, 'driver.js.iife.js'));
   const DRIVER_JS_SRC  = hasLocalDriver
@@ -405,7 +405,7 @@ function injectIntoHtml(html, targetUrl, proxyOrigin) {
     `<script src="${safeOrigin}/static/inject.js" defer></script>`
   ].join('\n');
 
-  // インターセプターは <head> の先頭、deferred アセットは </head> の直前に注入
+  // Inject interceptor at the start of <head> and deferred assets just before </head>
   if (/<head[^>]*>/i.test(html)) {
     html = html.replace(/(<head[^>]*>)/i, `$1\n${interceptorScript}`);
   } else {
@@ -500,7 +500,7 @@ function rewriteCssUrls(cssCode, cssUrl, proxyOrigin) {
     return `${proxyOrigin}/proxy?url=${encodeURIComponent(abs)}`;
   }
 
-  // url(...)（引用符あり/なし両対応）
+  // url(...) (handles both quoted/unquoted)
   cssCode = cssCode.replace(
     /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
     (_, q, inner) => `url(${q}${resolveRef(inner)}${q})`
@@ -524,13 +524,13 @@ async function handleProxy(req, res, reqUrl) {
     return;
   }
 
-  // POST ボディを読み込む（フォーム送信対応）
+  // Read POST body (form submission support)
   let upstreamMethod = req.method; // GET or POST or PUT etc
   let upstreamBody = null;
   let upstreamHeaders = {};
 
-  // NanbyoData / SPARQList 等の API は Origin / Referer が必要
-  // TogoDX 等 Vite SPA はこれらを付与するとエラーになるため対象外
+  // For APIs like NanbyoData / SPARQList, Origin / Referer are required.
+  // Vite SPAs like TogoDX are excluded as adding these headers causes errors.
   const targetHostname = (() => { try { return new URL(target).hostname; } catch { return ''; } })();
   if (hostNeedsOriginHeader(targetHostname)) {
     const targetOrigin = (() => { try { return new URL(target).origin; } catch { return ''; } })();
@@ -553,7 +553,7 @@ async function handleProxy(req, res, reqUrl) {
       return;
     }
 
-    // Content-Type はそのまま渡す（フォームデータやJSON）
+    // Pass Content-Type as is (for form-data or JSON)
     if (req.headers['content-type']) {
       upstreamHeaders['content-type'] = req.headers['content-type'];
     }
@@ -590,9 +590,9 @@ async function handleProxy(req, res, reqUrl) {
     return;
   }
 
-  // JavaScript の場合:
-  // - NanbyoData / NBRC 等（NEEDS_ORIGIN_DOMAINS）: ES module の相対 import をプロキシ経由に書き換える
-  // - TogoDX 等 Vite SPA: rewriteJsModuleImports が Vite バンドルを破壊するためスキップ
+  // For JavaScript:
+  // - NanbyoData / NBRC etc. (NEEDS_ORIGIN_DOMAINS): Rewrite relative ES module imports to go through the proxy.
+  // - TogoDX etc. Vite SPA: Skip because rewriteJsModuleImports breaks the Vite bundle.
   if (/javascript|ecmascript/i.test(upstreamContentType)) {
     const proxyOrigin = getProxyOrigin(req);
     const jsBody = hostNeedsOriginHeader(targetHostname)
@@ -608,8 +608,8 @@ async function handleProxy(req, res, reqUrl) {
     return;
   }
 
-  // CSS の場合、url(...) と @import の相対参照をプロキシ経由の絶対URLに書き換える
-  // （@font-face のフォント等が proxy ルートに解決されて 404 になるのを防ぐ）
+  // For CSS, rewrite relative references in url(...) and @import to absolute URLs via the proxy.
+  // (Prevents @font-face fonts etc. from resolving to proxy root and causing a 404)
   if (/text\/css/i.test(upstreamContentType)) {
     const proxyOrigin = getProxyOrigin(req);
     const rewrittenCss = rewriteCssUrls(upstream.body.toString('utf8'), target, proxyOrigin);
@@ -691,7 +691,7 @@ async function handleConsent(req, res) {
 
 let _cachedGuidePatterns = null;
 let _cachedPromptConfig = null;
-let _generatedGuides = new Map(); // 生成ガイドをメモリに保存
+let _generatedGuides = new Map(); // Store generated guides in memory
 
 // Mapping of site-specific guide directories (hostname -> directory name)
 const SITE_GUIDE_MAP = {
@@ -916,7 +916,7 @@ async function callGemini(modelName, prompt, apiKey) {
 
 async function callOpenAI(modelName, prompt, apiKey) {
   if (!apiKey) {
-    throw new Error('OpenAI API キーが必要です（apiKey パラメータ）');
+    throw new Error('OpenAI API key is required (apiKey parameter)');
   }
   const model = modelName || 'gpt-4o-mini';
 
@@ -962,7 +962,7 @@ async function callOpenAI(modelName, prompt, apiKey) {
 
 async function callClaude(modelName, prompt, apiKey) {
   if (!apiKey) {
-    throw new Error('Claude API キーが必要です（apiKey パラメータ）');
+    throw new Error('Claude API key is required (apiKey parameter)');
   }
   const model = modelName || 'claude-3-5-haiku-20241022';
 
@@ -1227,17 +1227,17 @@ async function handleBootstrapSite(req, res) {
   }
 }
 
-    // 8. JSON 配列を抽出
+    // 8. Extract JSON array
     const jsonMatch = llmResponse.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error('LLMがJSON配列を返しませんでした');
+    if (!jsonMatch) throw new Error('LLM did not return a JSON array');
     const guides = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(guides)) throw new Error('LLMのレスポンスがJSON配列ではありません');
+    if (!Array.isArray(guides)) throw new Error('LLM response is not a JSON array');
 
-    // 9. guides/{hostname}/guide-patterns.json に保存
+    // 9. Save to guides/{hostname}/guide-patterns.json
     fs.writeFileSync(patternPath, JSON.stringify(guides, null, 2), 'utf-8');
-    console.log(`[bootstrap] 保存: ${patternPath} (${guides.length}件)`);
+    console.log(`[bootstrap] Saved: ${patternPath} (${guides.length} guides)`);
 
-    // 10. キャッシュ更新
+    // 10. Cache update
     SITE_GUIDE_MAP[hostname] = hostname;
     _siteGuideCache.delete(hostname);
     _cachedGuidePatterns = null;
@@ -1250,7 +1250,7 @@ async function handleBootstrapSite(req, res) {
     }), 'application/json; charset=utf-8');
 
   } catch (err) {
-    console.error('[bootstrap] エラー:', err.message);
+    console.error('[bootstrap] Error:', err.message);
     sendText(res, 502, JSON.stringify({ error: err.message }), 'application/json; charset=utf-8');
   }
 }
@@ -1436,13 +1436,13 @@ async function handleGenerateGuide(req, res) {
         }), 'application/json; charset=utf-8');
         return;
       } catch (newGuideErr) {
-        console.error('[generate-guide] 新ガイド生成エラー:', newGuideErr.message);
-        // エラーの場合はフォールバックへ続行
+        console.error('[generate-guide] New guide generation error:', newGuideErr.message);
+        // Continue to fallback in case of error
       }
     }
 
-    // 新規ガイド生成の場合（fallback）
-    // AI が適切なガイドを判断できなかった場合は、基本操作の概要ガイドを表示する。
+    // Fallback for new guide generation
+    // If the AI could not determine an appropriate guide, display a basic operation overview guide.
     const FALLBACK_GUIDE_ID = 'nbrc-basic-overview';
     const fallbackGuide = allGuides.find(g => g.guideId === FALLBACK_GUIDE_ID);
     if (fallbackGuide) {
@@ -1459,7 +1459,7 @@ async function handleGenerateGuide(req, res) {
       return;
     }
 
-    // フォールバックガイドも見つからない場合
+    // If fallback guide is also not found
     const guideId = `generated-${Date.now()}`;
     const title = 'Generated Guide';
     
@@ -1502,16 +1502,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (reqUrl.pathname === '/api/guides') {
-    // ?url= が指定された場合はサイト別ガイドのみ返す
+    // If ?url= is specified, return only site-specific guides
     const targetUrl = reqUrl.searchParams.get('url') || '';
     const siteGuides = getGuidesForTargetUrl(targetUrl);
 
     let guides;
     if (siteGuides !== null) {
-      // サイトが識別できた場合はそのサイトのガイドのみ
+      // If site is identified, return only that site's guides
       guides = [...siteGuides];
     } else {
-      // URL 未指定またはマッチなし: 全ガイド（後方互換）
+      // Unspecified URL or no match: All guides (backward compatibility)
       const patterns = loadGuidePatterns();
       guides = [ECOLI_GUIDE, ...patterns];
       _generatedGuides.forEach((g) => guides.push(g));
@@ -1533,7 +1533,7 @@ const server = http.createServer(async (req, res) => {
     const guideId = decodeURIComponent(reqUrl.pathname.replace('/api/guides/', ''));
     const targetUrl = reqUrl.searchParams.get('url') || '';
 
-    // サイト別ガイドから検索
+    // Search from site-specific guides
     const siteGuides = getGuidesForTargetUrl(targetUrl);
     if (siteGuides !== null) {
       const guide = siteGuides.find(g => g.guideId === guideId);
@@ -1545,7 +1545,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // URL 未指定: 後方互換（全ガイドから検索）
+    // Unspecified URL: Backward compatibility (search from all guides)
     if (guideId === ECOLI_GUIDE.guideId) {
       sendText(res, 200, JSON.stringify(ECOLI_GUIDE), 'application/json; charset=utf-8');
       return;

@@ -99,107 +99,107 @@ Enter the URL, Ollama endpoint, and prompt, then click "Open" to access the page
 ## Auto-Generation Flow (Unknown Sites)
 
 ```
-1. ユーザーが未知 URL を入力して「開く」
+1. User enters unknown URL and clicks "Open"
         ↓
 2. POST /api/bootstrap-site
         ↓
-3. crawl_pages.py --url {URL} --output-dir guides/{ドメイン}/
-   Playwright でトップページ + 1 階層のリンクをクロール
-   → selector_info.json（CSS セレクター情報）、Markdown テキストを保存
+3. crawl_pages.py --url {URL} --output-dir guides/{domain}/
+   Crawls the top page + 1 level of links using Playwright
+   → Saves selector_info.json (CSS selector info) and Markdown text
         ↓
-4. LLM（Ollama）へのプロンプト構築
-   ・GUIDE_AUTHORING.md（仕様書）
-   ・既存 guide-patterns.json の例
-   ・クロール結果（selector_info.json + .md）
-   ・ユーザーのプロンプト（「やりたいこと」）
+4. Construct prompt for LLM (Gemini/Ollama)
+   - GUIDE_AUTHORING.md (Specification)
+   - Examples of existing guide-patterns.json
+   - Crawl results (selector_info.json + .md)
+   - User prompt ("What you want to do")
         ↓
-5. LLM が guide-patterns.json（JSON 配列）を生成
+5. LLM generates guide-patterns.json (JSON array)
         ↓
-6. guides/{ドメイン}/guide-patterns.json として保存
+6. Saved as guides/{domain}/guide-patterns.json
         ↓
-7. プロキシ経由で対象 URL へ遷移、ガイドを表示
+7. Navigate to target URL via proxy and display guide
 ```
 
 ---
 
-## ガイド JSON の形式
+## Guide JSON Format
 
 ```jsonc
 [
   {
-    "guideId": "example-first-use",   // 一意な識別子（kebab-case）
+    "guideId": "example-first-use",   // Unique identifier (kebab-case)
     "version": 1,
-    "locale": "ja-JP",
-    "title": "初めて使う",
-    "description": "基本操作の概要",
+    "locale": "en-US",
+    "title": "First Use",
+    "description": "Overview of basic operations",
     "steps": [
       {
         "id": "step-1",
-        "selector": "#search-input",  // CSS セレクター
+        "selector": "#search-input",  // CSS Selector
         "action": "highlight",        // "highlight" | "tooltip" | "complete"
-        "title": "検索ボックス",
-        "description": "ここにキーワードを入力します。"
+        "title": "Search Box",
+        "description": "Enter search terms here."
       }
     ]
   }
 ]
 ```
 
-詳細は [GUIDE_AUTHORING.md](GUIDE_AUTHORING.md) を参照してください。
+See [GUIDE_AUTHORING.md](GUIDE_AUTHORING.md) for details.
 
 ---
 
-## API エンドポイント
+## API Endpoints
 
-| エンドポイント | メソッド | 説明 |
+| Endpoint | Method | Description |
 |---|---|---|
-| `/` | GET | ホーム画面（URL 入力 + LLM 設定） |
-| `/proxy?url={URL}` | GET | プロキシ経由でページを表示 |
-| `/api/bootstrap-site` | POST | 未知サイトのクロール + ガイド生成 |
-| `/api/generate-guide` | POST | プロンプトからガイドを LLM で選択 |
-| `/api/guides?url={URL}` | GET | 対象 URL のガイド一覧を返す |
-| `/api/guides/{guideId}` | GET | ガイド詳細 JSON を返す |
+| `/` | GET | Home screen (URL input + LLM settings) |
+| `/proxy?url={URL}` | GET | Display page via proxy |
+| `/api/bootstrap-site` | POST | Crawl unknown site + generate guide |
+| `/api/generate-guide` | POST | Select guide via LLM based on user prompt |
+| `/api/guides?url={URL}` | GET | Returns list of guides for the target URL |
+| `/api/guides/{guideId}` | GET | Returns guide detail JSON |
 
 ---
 
-## 環境変数
+## Environment Variables
 
-| 変数 | デフォルト | 説明 |
+| Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8080` | サーバーの待受ポート |
-| `GEMINI_API_KEY` | なし | Gemini API を使う場合のみ設定 |
+| `PORT` | `8080` | Server port |
+| `GEMINI_API_KEY` | None | Only required if using Gemini API |
 
-Ollama を使う場合はブラウザの UI から URI / モデル名を直接入力します（環境変数不要）。
+When using Ollama, input the URI / model name directly in the browser UI (no environment variables required).
 
 ---
 
-## 動作要件
+## System Requirements
 
-| 項目 | 要件 |
+| Item | Requirement |
 |---|---|
-| Node.js | v18 以上 |
-| Python | 3.9 以上 |
-| Playwright | `playwright install chromium` 実行済み |
-| Ollama | 未知サイトのガイド生成時に必要 |
-| OS | WSL2（Ubuntu）推奨。Windows ネイティブでも動作可 |
+| Node.js | v18+ |
+| Python | 3.9+ |
+| Playwright | `playwright install chromium` executed |
+| Ollama | Required for auto-generating guides for unknown sites |
+| OS | WSL2 (Ubuntu) recommended. Also runs natively on Windows. |
 
 ---
 
-## 既知サイトの追加方法
+## How to Add Registered Sites
 
-1. `guides/{サイト名}/guide-patterns.json` を作成（仕様書に従い手動またはLLMで）
-2. `proxy-server/server.js` の `SITE_GUIDE_MAP` にホスト名を追加:
+1. Create `guides/{site-name}/guide-patterns.json` (manually or via LLM according to the spec)
+2. Add the hostname to `SITE_GUIDE_MAP` in `proxy-server/server.js`:
 
 ```js
 const SITE_GUIDE_MAP = {
-  'example.com': 'example',   // ← 追加
+  'example.com': 'example',   // ← Add here
 };
 ```
 
-または、ブラウザから対象 URL を開くと自動的に登録されます（未知サイト自動生成機能）。
+Alternatively, it will be automatically registered when you open the target URL from the browser (Auto-Generation feature).
 
 ---
 
-## ライセンス
+## License
 
 MIT

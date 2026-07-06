@@ -7,14 +7,14 @@ with open(PROMPT_PATH, encoding='utf-8') as f:
 
 NEW_HTML = """\
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guide Proxy</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: "Yu Gothic UI", Meiryo, sans-serif; margin: 24px; background: #f5f5f5; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 24px; background: #f5f5f5; }
     h1 { color: #333; }
     .section { background: white; padding: 24px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .section h2 { margin-top: 0; color: #005faf; }
@@ -139,7 +139,7 @@ NEW_HTML = """\
       setLoading('Checking site...');
 
       try {
-        // Step 1: Bootstrap (既知サイトは即返却、未知サイトはクロール＋ガイド生成)
+        // Step 1: Bootstrap (Return context if known, crawl and generate if unknown)
         const bsResp = await fetch('/api/bootstrap-site', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -183,7 +183,7 @@ NEW_HTML = """\
                 }
               }
             }
-          } catch (_) { /* ガイド選択失敗は無視してページを開く */ }
+          } catch (_) { /* Ignore guide selection failure and just open the page */ }
         }
 
         statusDiv.className = 'status success';

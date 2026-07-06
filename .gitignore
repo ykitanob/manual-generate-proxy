@@ -1,39 +1,39 @@
 # ===========================
-# サイト固有データ（非公開）
+# Site-specific data (Private)
 # ===========================
 
-# サイト別ガイドデータ（guides/<サイト名>/ 以下を除外、例示ファイルは含める）
+# Guide data per site (Exclude guides/<site>/*, but keep example files)
 guides/*/
 
-# 旧形式のガイドファイル（ルート直下）
+# Legacy guide files (root directory)
 guide-patterns.json
 togodx_guide-patterns.json
 
-# ホームページUI・LLMプロンプト設定（サイト固有URLを含む）
+# Home UI / LLM Prompt Settings (Contains site-specific URLs)
 proxy-server/guide-selection-prompt.json
 
 # ===========================
-# 環境・シークレット
+# Environment / Secrets
 # ===========================
 .env
 .env.*
 *.env
 
 # ===========================
-# 依存パッケージ
+# Dependencies
 # ===========================
 node_modules/
 proxy-server/node_modules/
 
 # ===========================
-# キャッシュ・ビルド成果物
+# Cache / Build Artifacts
 # ===========================
 *.log
 npm-debug.log*
 .npm/
 
 # ===========================
-# OS・エディタ
+# OS / Editor
 # ===========================
 .DS_Store
 Thumbs.db
@@ -42,7 +42,7 @@ Thumbs.db
 *.swo
 
 # ===========================
-# クロール済みキャッシュHTML（サイト固有）
+# Crawled Cache HTML (Site-specific)
 # ===========================
 menu_001_*.html
 togoDX_case.html

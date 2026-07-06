@@ -112,18 +112,18 @@ Discarded the `patchCurrentScript` approach itself and changed `rewriteResourceU
 
 ### Bug 5 — Next.js `InvariantError: Expected document.currentScript src to contain '/_next/'`
 
-**症状**
+**Symptoms**
 
 ```
 Uncaught InvariantError: Invariant: Expected document.currentScript src to contain '/_next/'.
 Received http://172.27.184.54:18080/proxy?url=https%3A%2F%2Flmstudio.ai%2F...%2F_next%2F... instead.
 ```
 
-**原因**  
-`rewriteResourceUrls()` が `<script src>` のすべてを `/proxy?url=...` でラップするため、`document.currentScript.src` がプロキシ URL になる。Next.js は起動時に `currentScript.src.includes('/_next/')` を検証するが、プロキシ URL 内の `_next` は `%2F_next%2F`（URL エンコード）になっており、literal `/_next/` を含まない。
+**Cause**  
+Since `rewriteResourceUrls()` wraps all `<script src>` in `/proxy?url=...`, `document.currentScript.src` becomes the proxy URL. Next.js validates `currentScript.src.includes('/_next/')` at startup, but `_next` within the proxy URL is URL-encoded as `%2F_next%2F`, so it doesn't contain the literal `/_next/`.
 
-**修正**  
-`rewriteResourceUrls` 内に `isFrameworkStatic()` を追加し、フレームワーク静的ファイルはプロキシを介さず直接 URL を使用する。
+**Fix**  
+Added `isFrameworkStatic()` within `rewriteResourceUrls` to use the direct URL for framework static files without going through the proxy.
 
 ```js
 function isFrameworkStatic(absUrl) {
@@ -133,56 +133,56 @@ function isFrameworkStatic(absUrl) {
 
 function toProxyUrl(href, direct) {
   const abs = new URL(href, base).href;
-  if (direct && isFrameworkStatic(abs)) return abs;  // ← 直接 URL を返す
+  if (direct && isFrameworkStatic(abs)) return abs;  // ← Return direct URL
   return `${proxyOrigin}/proxy?url=${encodeURIComponent(abs)}`;
 }
 ```
 
-`<script src>` と `<link href>` の置換に `direct=true` を渡し、`<img>` と `<form action>` はプロキシ経由のまま維持。
+Passed `direct=true` for replacement of `<script src>` and `<link href>`, while keeping `<img>` and `<form action>` via the proxy.
 
 ---
 
-### Bug 6 — Driver.js の読み込み失敗（`window.driver.js.driver` vs `window["driver.js"]`）
+### Bug 6 — Driver.js load failure (`window.driver.js.driver` vs `window["driver.js"]`)
 
-**症状**  
-ガイドボタンをクリックすると「Driver.js の読み込みに失敗しました」アラートが表示される。
+**Symptoms**  
+Clicking the guide button displays an alert saying "Failed to load Driver.js."
 
-**原因（複合）**
+**Cause (Complex)**
 
-1. **ファイルが存在しない**  
-   `chrome-kakucyo/` ディレクトリ（driver.js の提供元）が git commit `77524f8` で削除されており、`/assets/driver.js` エンドポイントが常に 404 を返していた。
+1. **File Missing**  
+   The `chrome-kakucyo/` directory (source for Driver.js) was deleted in git commit `77524f8`, so the `/assets/driver.js` endpoint was returning 404.
 
-2. **グローバル変数名の混同**  
-   CDN の UMD ビルド (`driver.js.umd.min.js`) は `window["driver.js"]`（ブラケット記法）にエクスポートする。  
-   一方、IIFE ビルド (`driver.js.iife.js`) は `window.driver.js`（ドット記法、`window.driver` オブジェクトの `.js` プロパティ）にエクスポートする。  
-   これらは JavaScript としてまったく異なるプロパティ参照である。
+2. **Global Variable Name Confusion**  
+   The CDN UMD build (`driver.js.umd.min.js`) exports to `window["driver.js"]` (bracket notation).  
+   Meanwhile, the IIFE build (`driver.js.iife.js`) exports to `window.driver.js` (dot notation; the `.js` property of the `window.driver` object).  
+   These are completely different property references in JavaScript.
 
    ```js
-   window["driver.js"].driver   // UMD 用：キー "driver.js" をブラケット記法でアクセス
-   window.driver.js.driver      // IIFE 用：window.driver → .js → .driver
+   window["driver.js"].driver   // For UMD: Access key "driver.js" via bracket notation
+   window.driver.js.driver      // For IIFE: window.driver → .js → .driver
    ```
 
-3. **inject.js の誤修正**  
-   CDN UMD を使う想定で `window.driver.js.driver` → `window['driver.js'].driver` に変更したが、実際に使用すべきは IIFE ビルドであり、修正後のコードは常に `undefined` を参照していた。
+3. **Incorrect fix in `inject.js`**  
+   We changed `window.driver.js.driver` → `window['driver.js'].driver` assuming CDN UMD usage, but the IIFE build was actually used, so the modified code always referred to `undefined`.
 
-**修正**  
-- `proxy-server/package.json` に `"driver.js": "^1.0.0"` を追加して `npm install`
-- `/assets/driver.js` エンドポイントを `node_modules/driver.js/dist/driver.js.iife.js` から提供
-- `inject.js` の参照を元の `window.driver.js.driver` に戻す
-- CDN URL のフォールバックも IIFE ビルド用 URL (`driver.js.iife.js`) に修正
+**Fix**  
+- Added `"driver.js": "^1.0.0"` to `proxy-server/package.json` and ran `npm install`.
+- Served the `/assets/driver.js` endpoint from `node_modules/driver.js/dist/driver.js.iife.js`.
+- Reverted the reference in `inject.js` back to `window.driver.js.driver`.
+- Fixed the CDN fallback URL to use the IIFE build (`driver.js.iife.js`).
 
-**教訓**  
-npm パッケージが提供するビルド形式（ESM / CJS / UMD / IIFE）によってグローバル変数の設定方法が異なる。CDN で公開されているファイルのヘッダー（`this.x=this.x||{}, this.x.y=(function...`）を確認することで正確なグローバルパスが分かる。
+**Lesson**  
+The global variable configuration depends on the build format (ESM / CJS / UMD / IIFE) provided by the npm package. Checking the header of the CDN-published file (`this.x=this.x||{}, this.x.y=(function...`) reveals the exact global path.
 
 ---
 
-## まとめ
+## Summary
 
-| バグ | 根本原因のカテゴリ |
+| Bug | Root Cause Category |
 |---|---|
-| stderr truncation | デバッグ補助コードの設計ミス |
-| guide-patterns glob | ハードコードされた設定値 |
-| function declaration 欠落 | str_replace の境界ミス |
-| Object.defineProperty クラッシュ | 例外の伝播範囲の考慮不足 |
-| Next.js InvariantError | プロキシが全リソースを URL ラップする副作用 |
-| Driver.js グローバル名混同 | UMD vs IIFE ビルドの違いへの無理解 |
+| stderr truncation | Design error in debug helper code |
+| guide-patterns glob | Hardcoded configuration values |
+| function declaration missing | Mismanagement of `str_replace` boundaries |
+| Object.defineProperty crash | Insufficient consideration of exception propagation scope |
+| Next.js InvariantError | Side effect of proxy wrapping all resources |
+| Driver.js global name confusion | Lack of understanding of UMD vs IIFE build differences |

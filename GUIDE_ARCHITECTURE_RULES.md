@@ -99,7 +99,7 @@
 
 ## 5. Recommended Structure for GuidePackage
 
-### 5.1 トップレベル
+### 5.1 Top-level
 
 - guideId: string
 - version: integer
@@ -146,86 +146,86 @@
 - maxDomOps: integer
 - maxDurationMs: integer
 
-## 6. 検証ルール
+## 6. Validation Rules
 
-1. selector検証
-   - script, iframe, html, body全域破壊系は拒否
-   - 許可済みセレクタパターンのみ実行
-2. action検証
-   - enum外は拒否
-3. 文字列長検証
-   - title 80文字以内
-   - description 400文字以内
-4. ステップ数検証
-   - 1以上10以下
-5. ドメイン検証
-   - pageUrlがallowedDomainsに一致しない場合は拒否
-6. 署名検証
-   - 署名不一致は破棄
-7. 期限検証
-   - expiresAt超過は実行不可
+1. Selector Validation
+   - Reject full-page destructive elements like `script`, `iframe`, `html`, `body`.
+   - Only execute allowed selector patterns.
+2. Action Validation
+   - Reject anything outside the enum.
+3. String Length Validation
+   - `title`: max 80 characters.
+   - `description`: max 400 characters.
+4. Step Count Validation
+   - Between 1 and 10.
+5. Domain Validation
+   - Reject if `pageUrl` does not match `allowedDomains`.
+6. Signature Validation
+   - Discard if signature does not match.
+7. Expiration Validation
+   - Do not execute if `expiresAt` is exceeded.
 
-## 7. セキュア実行ルール
+## 7. Secure Execution Rules
 
-1. eval/new Function/任意スクリプト実行を禁止
-2. DOM変更は固定ランタイム関数経由に限定
-3. スタイル注入は名前空間クラスに限定
-4. 失敗時は即ロールバック
-5. 1ガイドあたり操作回数と実行時間に上限を設ける
+1. Prohibit `eval`, `new Function`, or any arbitrary script execution.
+2. Limit DOM changes to fixed runtime functions.
+3. Limit style injection to namespaced classes.
+4. Roll back immediately on failure.
+5. Set limits on the number of operations and execution time per guide.
 
-## 8. API最小セット
+## 8. Minimum API Set
 
 1. `POST /v1/guides/generate`
-   - GuidePackageを返す
+   - Returns a `GuidePackage`.
 2. `POST /v1/guides/events`
-   - step開始/完了/失敗を記録
+   - Records step start, completion, and failure.
 3. `GET /v1/guides/policy`
-   - ドメイン別許可ルール配布
+   - Distributes permission rules by domain.
 
-## 9. 実行フロー
+## 9. Execution Flow
 
-1. ページ読込後、Runtimeが軽量DOM要約を作成
-2. WorkerがGuide APIへ生成依頼
-3. Guide APIがLLM生成結果を検証し署名
-4. Runtimeが署名検証後にガイド実行
-5. ユーザー操作に応じて次ステップへ進行
-6. 実行ログをevents APIへ送信
+1. After page load, the Runtime creates a lightweight DOM summary.
+2. The Worker requests guide generation from the Guide API.
+3. The Guide API validates the LLM generation results and signs them.
+4. The Runtime executes the guide after signature verification.
+5. Progresses to the next step based on user action.
+6. Sends execution logs to the events API.
 
-## 10. PoC成功基準
+## 10. PoC Success Criteria
 
-1. Eボタン未選択時
-   - E案内 -> クリック待ち -> 遷移後Search再開
-2. Eボタン選択済み時
-   - Eステップのみ説明スキップ、他ステップ継続
-3. UI破壊なし
-   - 主要レイアウト差分が小さい
-4. セキュリティ
-   - 任意JS実行ゼロ
-   - 署名不一致ガイドの拒否
+1. If English button is not selected:
+   - Guide for English -> Wait for click -> Resume Search after transition.
+2. If English button is already selected:
+   - Skip explanation only for that step, continue other steps.
+3. No UI destruction:
+   - Minimal differences in major layout.
+4. Security:
+   - Zero arbitrary JS execution.
+   - Rejection of guides with mismatched signatures.
 
-## 11. スキーマ運用
+## 11. Schema Management
 
-- GuidePackage の正式な検証ルールは [guide-package.schema.json](guide-package.schema.json) を参照する
-- サーバー側は LLM 応答を必ずスキーマ検証してから返却する
-- 拡張側も受信時に再検証し、検証失敗時は実行せずに破棄する
+- Refer to [guide-package.schema.json](guide-package.schema.json) for formal `GuidePackage` validation rules.
+- The server must always schema-validate the LLM response before returning it.
+- The extension must also re-validate upon reception and discard if validation fails.
 
-### 11.1 検証の実装ポイント
+### 11.1 Key Implementation Points for Validation
 
-1. 生成直後に検証
-   - LLM 応答 JSON を [guide-package.schema.json](guide-package.schema.json) で検証
-2. 署名前に検証
-   - 不正な JSON に署名しない
-3. 実行前に検証
-   - Runtime でも再検証して二重ガード
+1. Validate immediately after generation:
+    - Validate the LLM response JSON against [guide-package.schema.json](guide-package.schema.json).
+2. Validate before signing:
+    - Never sign invalid JSON.
+3. Validate before execution:
+    - Re-validate within the Runtime for double-guard protection.
 
-### 11.2 互換性ルール
+### 11.2 Compatibility Rules
 
-1. `version` を必須とし、破壊的変更時にメジャーを上げる
-2. 既存クライアントと互換しない項目は `additionalProperties: false` で拒否する
-3. 新規項目を追加する場合は先に schema を更新し、その後に生成側を更新する
+1. `version` is mandatory; increment major on breaking changes.
+2. Reject items that are not compatible with existing clients using `additionalProperties: false`.
+3. To add new items, update the schema first, then the generation side.
 
-### 11.3 トラブル時の扱い
+### 11.3 Error Handling
 
-1. 検証エラー時はガイドを実行しない
-2. ユーザーには「ガイドを生成できませんでした」を表示
-3. ログには requestId, guideId, 失敗したフィールド名を残す
+1. Do not execute guidelines when a validation error occurs.
+2. Display "Could not generate guide" to the user.
+3. Log `requestId`, `guideId`, and the name of the field that failed.

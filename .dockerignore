@@ -2,19 +2,19 @@
 .git
 .gitignore
 
-# エディタ・OS
+# Editor / OS
 .vscode
 *.DS_Store
 Thumbs.db
 
-# テスト・ドキュメント
+# Test / Documentation
 test.html
 test2.html
 *.md
 
-# node_modules はビルドステージで再生成するためスキップ
+# Exclude node_modules as they are regenerated during build
 proxy-server/node_modules
 
-# ログ
+# Logs
 *.log
 npm-debug.log*

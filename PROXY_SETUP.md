@@ -101,83 +101,82 @@ After starting the server, verify using another shell.
 curl -s http://localhost:18080/api/guides | head -c 400
 ```
 
-`{"count":N,"guides":[...]}` が返れば OK。
+Success if `{"count":N,"guides":[...]}` is returned.
 
-### プロキシ経由のページ取得
+### Fetching Pages via Proxy
 
 ```bash
 curl -s "http://localhost:18080/proxy?url=https%3A%2F%2Fnanbyodata.jp%2F" | head -c 200
 ```
 
-### ES module import 書き換えの確認
+### Checking ES Module Import Rewriting
 
 ```bash
 curl -s "http://localhost:18080/proxy?url=https%3A%2F%2Fnanbyodata.jp%2Fstatic%2Fjs%2Fmain.js" | grep navigation
 ```
 
-`from "http://localhost:18080/proxy?url=...navigation.js"` のように
-**絶対プロキシ URL に書き換わっていれば成功**です。
+Success if it is **rewritten to an absolute proxy URL** like:
+`from "http://localhost:18080/proxy?url=...navigation.js"`
 
-### ブラウザでの利用
+### Using in a Browser
 
 ```
-http://localhost:18080/proxy?url=<対象サイトのURL>
+http://localhost:18080/proxy?url=<TARGET_URL>
 ```
 
-例:
+Example:
 ```
 http://localhost:18080/proxy?url=https://nanbyodata.jp/
 ```
 
 ---
 
-## 7. コード変更を反映する手順
+## 7. Applying Code Changes
 
-Node.js はホットリロードしないため、`server.js` や `static/*.js` を編集したら
-**サーバーを再起動**してください。
+Since Node.js does not hot-reload, please **restart the server** after editing `server.js` or `static/*.js`.
 
 ```
-Ctrl + C            # 停止
-PORT=18080 node proxy-server/server.js   # 再起動
+Ctrl + C                               # Stop
+PORT=18080 node proxy-server/server.js # Restart
 ```
 
-> `static/inject.js` / `static/inject.css` / `static/interceptor.js` は
-> 静的配信のため、サーバー再起動後にブラウザをリロードすれば反映されます。
+> `static/inject.js`, `static/inject.css`, and `static/interceptor.js` are 
+> served as static files, so changes will be reflected after a server restart and browser reload.
 
 ---
 
-## 8. ディレクトリ構成
+## 8. Directory Structure
 
 ```
 proxy-server/
-├── server.js                    # プロキシ本体
+├── server.js                    # Core proxy server
 ├── package.json
-├── validate-guide.js            # ガイド JSON のスキーマ検証
+├── validate-guide.js            # Guide JSON schema validation
 ├── guide-selection-prompt.json  # Prompt settings for AI guide selection
-├── start-proxy.sh               # 起動スクリプト（WSL/bash）
+├── start-proxy.sh               # Startup script (WSL/bash)
 └── static/
-    ├── inject.js                # ページ注入スクリプト（ガイド UI 制御）
-    ├── inject.css               # 注入スタイル
-    └── interceptor.js           # fetch / XHR インターセプター
+    ├── inject.js                # Injection script (Guide UI control)
+    ├── inject.css               # Injection styles
+    └── interceptor.js           # fetch / XHR interceptor
 
-（リポジトリ直下）
-├── guide-patterns.json          # NBRC / NanbyoData 向けガイド定義
-└── togodx_guide-patterns.json   # TogoDX 向けガイド定義
+(Root directory)
+├── guide-patterns.json          # Guide definitions for NBRC / NanbyoData
+└── togodx_guide-patterns.json   # Guide definitions for TogoDX
 ```
 
 ---
 
-## 9. トラブルシューティング
+## 9. Troubleshooting
 
-| 症状 | 原因 | 対処 |
+| Symptom | Cause | Resolution |
 |---|---|---|
-| ガイドボタンが表示されない | `/api/guides` が取得できていない / JSON に BOM | JSON の BOM を除去（`server.js` は BOM 除去対応済み）。サーバー再起動 |
-| ドロップダウン等が動かない | ES module の相対 import が解決できていない | サーバーを最新コードで再起動（import 書き換え機能が必要） |
-| `Uncaught SyntaxError` | 旧バージョンのインラインスクリプト | 最新コードに更新してサーバー再起動 |
-| ポートが使用中 | 別プロセスが同ポートを使用 | `PORT` を変更するか、既存プロセスを停止 |
-| コード変更が反映されない | サーバー未再起動 | `Ctrl+C` → 再起動 |
+| Guide button is not displayed | Failed to fetch `/api/guides` / BOM in JSON | Remove BOM from JSON (Note: `server.js` already handles BOM removal). Restart the server. |
+| Dropdowns, etc., do not work | ES module relative imports are not resolved | Restart server with the latest code (Import rewriting feature is required). |
+| `Uncaught SyntaxError` | Legacy version of inline script | Update to the latest code and restart the server. |
+| Port is already in use | Another process is using the same port | Change `PORT` or stop the existing process. |
+| Code changes are not reflected | Server not restarted | `Ctrl+C` -> Restart. |
 
-稼働中プロセスの確認:
+Check running processes:
 ```bash
 ps aux | grep server.js | grep -v grep
 ss -ltn | grep 18080

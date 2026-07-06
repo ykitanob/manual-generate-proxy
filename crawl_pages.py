@@ -64,19 +64,19 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _slug(text: str, max_len: int = 80) -> str:
-    """URLやタイトルをファイル名として安全な形にする。"""
+    """Make URL or title slug safe for filenames."""
     s = re.sub(r"[^a-zA-Z0-9_-]+", "_", text).strip("_")
     return s[:max_len] if s else "page"
 
 
 def _url_to_file_prefix(url: str, max_len: int = 100) -> str:
-    """URL のドメイン+パスをファイル名プレフィックスに変換する。
-    例: https://example.com/aaa/bbb.html -> example.com_aaa_bbb
+    """Convert URL domain+path to a filename prefix.
+    Example: https://example.com/aaa/bbb.html -> example.com_aaa_bbb
     """
     parsed = urlparse(url)
     host = (parsed.hostname or "unknown").lower()
     path = parsed.path.rstrip("/")
-    # 拡張子を除去
+    # Remove file extension
     path = re.sub(r"\.[a-zA-Z]{2,5}$", "", path)
     combined = host + path
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", combined).strip("_")
@@ -84,22 +84,22 @@ def _url_to_file_prefix(url: str, max_len: int = 100) -> str:
 
 
 def _to_markdown_text(html: str) -> str:
-    """簡易的に HTML から可読テキストを作る。"""
+    """Create readable text from HTML (simple approach)."""
     soup = BeautifulSoup(html, "html.parser")
     texts = [re.sub(r"\s+", " ", t.strip()) for t in soup.stripped_strings if t.strip()]
     return "\n".join(texts)
 
 
 def _extract_level1_links(html: str, base_url: str) -> list[dict]:
-    """header/nav と nav系 div 配下の href を収集し、1階層候補リンクを返す。"""
+    """Collect href links from header/nav and nav-related divs (one level deep)."""
     soup = BeautifulSoup(html, "html.parser")
     base_parsed = urlparse(base_url)
     base_host = (base_parsed.hostname or "").lower()
     base_path = base_parsed.path or "/"
     if not base_path.startswith("/"):
         base_path = f"/{base_path}"
-    # 開始URLの1つ上の階層を探索対象の基準にする。
-    # 例: /aaa/aaa を指定した場合は /aaa/ 配下を許可し、/aaa/bbb も対象にする。
+    # Use the parent directory of the start URL as the crawling scope.
+    # e.g., if /aaa/aaa is specified, allow everything under /aaa/ (including /aaa/bbb).
     parent_path = str(Path(base_path).parent).replace("\\", "/")
     if not parent_path.startswith("/"):
         parent_path = f"/{parent_path}"
@@ -134,7 +134,7 @@ def _extract_level1_links(html: str, base_url: str) -> list[dict]:
 
         if parsed.scheme not in ("http", "https"):
             continue
-        # 指定したドメインと完全一致のみ許可(下位/上位ドメインは除外)
+        # Only allow exact host match (exclude subdomains/parent domains)
         if not host:
             continue
         if host != base_host:
@@ -142,7 +142,7 @@ def _extract_level1_links(html: str, base_url: str) -> list[dict]:
         candidate_path = parsed.path or "/"
         if not candidate_path.startswith("/"):
             candidate_path = f"/{candidate_path}"
-        # 開始URLの1つ上の階層より上位には遷移しない(親階層配下のみ許可)
+        # Do not crawl above the parent directory of the start URL (Scope restriction)
         if parent_path != "/" and candidate_path != parent_path.rstrip("/") and not candidate_path.startswith(parent_prefix):
             continue
         if abs_url in seen:
@@ -159,7 +159,7 @@ def _extract_level1_links(html: str, base_url: str) -> list[dict]:
 
 
 def _get_selector(el) -> str:
-    """要素の CSS セレクタを生成する（id 優先 → class → 属性 → 親+nth-child）。"""
+    """Generate a CSS selector for an element (Prioritize id -> class -> attribute -> parent+nth-child)."""
     el_id = (el.get("id") or "").strip()
     if el_id:
         return f"#{el_id}"
@@ -192,7 +192,7 @@ def _get_selector(el) -> str:
 
 
 def _get_label_text(el, soup) -> str:
-    """input/button に対応する label テキストを返す。"""
+    """Return the label text associated with an input/button."""
     el_id = (el.get("id") or "").strip()
     if el_id:
         label = soup.find("label", {"for": el_id})
@@ -206,8 +206,8 @@ def _get_label_text(el, soup) -> str:
 
 def _extract_selector_info(html: str, page_url: str) -> dict:
     """
-    guide-patterns.json の selector フィールド生成に必要な要素情報を抽出する。
-    出力カテゴリ:
+    Extract element information needed to generate guide-patterns.json selectors.
+    Output categories:
       headings / interactive_elements / links / forms / tables / navigation
     """
     soup = BeautifulSoup(html, "html.parser")
@@ -215,7 +215,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
     def data_attrs(el) -> dict:
         return {k: v for k, v in (el.attrs or {}).items() if k.startswith("data-")}
 
-    # --- 見出し（H1〜H3）---
+    # --- Headings (H1-H3) ---
     headings = []
     for level in (1, 2, 3):
         for h in soup.find_all(f"h{level}"):
@@ -227,7 +227,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
                 "selector": _get_selector(h),
             })
 
-    # --- インタラクティブ要素（button / input / select / textarea）---
+    # --- Interactive Elements (button / input / select / textarea) ---
     interactive = []
     for el in soup.find_all(["button", "input", "select", "textarea"]):
         interactive.append({
@@ -237,7 +237,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
             "type": el.get("type", ""),
             "name": el.get("name", ""),
             "placeholder": el.get("placeholder", ""),
-            "value": el.get("value", "") if el.name in ("input", "button") else "",
+            "value": el.get("value") if el.name in ("input", "button") else "",
             "text": el.get_text(" ", strip=True),
             "role": el.get("role", ""),
             "data_attrs": data_attrs(el),
@@ -245,7 +245,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
             "selector": _get_selector(el),
         })
 
-    # --- リンク（<a href>）---
+    # --- Links (<a href>) ---
     links_info = []
     for a in soup.find_all("a", href=True):
         links_info.append({
@@ -259,7 +259,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
             "selector": _get_selector(a),
         })
 
-    # --- フォーム ---
+    # --- Forms ---
     forms_info = []
     for form in soup.find_all("form"):
         fields = []
@@ -282,10 +282,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
             "action": form.get("action", ""),
             "method": form.get("method", "get").upper(),
             "selector": _get_selector(form),
-            "fields": fields,
-        })
-
-    # --- テーブル ---
+    # --- Tables ---
     tables_info = []
     for table in soup.find_all("table"):
         headers = [th.get_text(" ", strip=True) for th in table.find_all("th")]
@@ -299,7 +296,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
             "data_row_count": data_rows,
         })
 
-    # --- ナビゲーション（nav / header 内リンク）---
+    # --- Navigation (nav / header links) ---
     nav_info = []
     for nav in soup.find_all(["nav", "header"]):
         items = [
@@ -331,7 +328,7 @@ def _extract_selector_info(html: str, page_url: str) -> dict:
 
 
 def _crawl_single_page(page, url: str) -> dict:
-    """1ページを取得してタイトルと HTML を返す。"""
+    """Fetch a single page and return its title and HTML."""
     page.goto(url, wait_until="networkidle", timeout=60_000)
     page.wait_for_timeout(800)
     return {
@@ -465,7 +462,7 @@ def save(data: dict, output_dir: Path | None = None) -> None:
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    # トップページの selector_info を保存
+    # Save top page selector_info
     (dest / f"{prefix}_selector_info.json").write_text(
         json.dumps(data.get("selector_info", {}), ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -507,16 +504,16 @@ def save(data: dict, output_dir: Path | None = None) -> None:
         json.dumps(level1_index, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    print(f"[OK] 保存しました -> {dest}")
-    print(f"     プレフィックス: {prefix}")
-    print(f"     - {prefix}.md    ({len(data['markdown']):,} 文字)")
-    print(f"     - {prefix}.html  ({len(data['html']):,} 文字)")
+    print(f"[OK] Saved to: {dest}")
+    print(f"     Prefix: {prefix}")
+    print(f"     - {prefix}.md    ({len(data['markdown']):,} chars)")
+    print(f"     - {prefix}.html  ({len(data['html']):,} chars)")
     print(f"     - {prefix}_meta.json")
     print(f"     - {prefix}_selector_info.json")
     print(f"     - {prefix}_level1_menu.json")
-    print(f"     - menu_* ファイル ({len(level1_index)}件、各 _selector_info.json 含む)")
-    print(f"\n     タイトル: {data['title']}")
-    print("\n--- Markdown プレビュー(先頭500文字) ---")
+    print(f"     - menu_* files ({len(level1_index)} items, including _selector_info.json)")
+    print(f"\n     Title: {data['title']}")
+    print("\n--- Markdown Preview (First 500 characters) ---")
     print(data["markdown"][:500])
     print("---")
 
